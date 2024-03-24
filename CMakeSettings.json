@@ -1,0 +1,28 @@
+﻿{
+  "configurations": [
+    {
+      "name": "PSVita-Debug",
+      "generator": "Unix Makefiles",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "ctestCommandArgs": "",
+      "cmakeToolchain": "${projectDir}\\psvita-toolchain.cmake",
+      "intelliSenseMode": "linux-gcc-arm",
+      "inheritEnvironments": []
+    },
+    {
+      "name": "PSVita-Release",
+      "generator": "Ninja",
+      "configurationType": "RelWithDebInfo",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "cmakeToolchain": "${projectDir}\\psvita-toolchain.cmake",
+      "intelliSenseMode": "linux-gcc-arm",
+      "inheritEnvironments": []
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+float4 main(uniform float4 u_clearColor) : COLOR
+{
+	return u_clearColor;
+}
+
+//float4 main() : COLOR
+//{
+//	return float4(1.0f, 0.0f, 0.0f, 1.0f);
+//}
