@@ -1074,8 +1074,8 @@ int main()
 		}
 
 		//update cube rotation
-		cubeRotation.x += 0.36f; // * deltaTime TODO
-		cubeRotation.y += 0.50f;
+		cubeRotation.x += 0.036f; // * deltaTime TODO
+		cubeRotation.y += 0.050f;
 		cubeRotation.z += 0.01f;
 
 		//cubeModelMatrix.rotate(Vector3f(cubeRotation.x, cubeRotation.y, cubeRotation.z));
