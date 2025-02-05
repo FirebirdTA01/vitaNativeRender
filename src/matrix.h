@@ -48,25 +48,18 @@ public:
 		{
 			tempMatrix[i] = matrix[i];
 		}
-		matrix[0] = tempMatrix[0] * rhs.matrix[0] + tempMatrix[1] * rhs.matrix[4] + tempMatrix[2] * rhs.matrix[8] + tempMatrix[3] * rhs.matrix[12];
-		matrix[1] = tempMatrix[0] * rhs.matrix[1] + tempMatrix[1] * rhs.matrix[5] + tempMatrix[2] * rhs.matrix[9] + tempMatrix[3] * rhs.matrix[13];
-		matrix[2] = tempMatrix[0] * rhs.matrix[2] + tempMatrix[1] * rhs.matrix[6] + tempMatrix[2] * rhs.matrix[10] + tempMatrix[3] * rhs.matrix[14];
-		matrix[3] = tempMatrix[0] * rhs.matrix[3] + tempMatrix[1] * rhs.matrix[7] + tempMatrix[2] * rhs.matrix[11] + tempMatrix[3] * rhs.matrix[15];
 
-		matrix[4] = tempMatrix[4] * rhs.matrix[0] + tempMatrix[5] * rhs.matrix[4] + tempMatrix[6] * rhs.matrix[8] + tempMatrix[7] * rhs.matrix[12];
-		matrix[5] = tempMatrix[4] * rhs.matrix[1] + tempMatrix[5] * rhs.matrix[5] + tempMatrix[6] * rhs.matrix[9] + tempMatrix[7] * rhs.matrix[13];
-		matrix[6] = tempMatrix[4] * rhs.matrix[2] + tempMatrix[5] * rhs.matrix[6] + tempMatrix[6] * rhs.matrix[10] + tempMatrix[7] * rhs.matrix[14];
-		matrix[7] = tempMatrix[4] * rhs.matrix[3] + tempMatrix[5] * rhs.matrix[7] + tempMatrix[6] * rhs.matrix[11] + tempMatrix[7] * rhs.matrix[15];
-
-		matrix[8] = tempMatrix[8] * rhs.matrix[0] + tempMatrix[9] * rhs.matrix[4] + tempMatrix[10] * rhs.matrix[8] + tempMatrix[11] * rhs.matrix[12];
-		matrix[9] = tempMatrix[8] * rhs.matrix[1] + tempMatrix[9] * rhs.matrix[5] + tempMatrix[10] * rhs.matrix[9] + tempMatrix[11] * rhs.matrix[13];
-		matrix[10] = tempMatrix[8] * rhs.matrix[2] + tempMatrix[9] * rhs.matrix[6] + tempMatrix[10] * rhs.matrix[10] + tempMatrix[11] * rhs.matrix[14];
-		matrix[11] = tempMatrix[8] * rhs.matrix[3] + tempMatrix[9] * rhs.matrix[7] + tempMatrix[10] * rhs.matrix[11] + tempMatrix[11] * rhs.matrix[15];
-
-		matrix[12] = tempMatrix[12] * rhs.matrix[0] + tempMatrix[13] * rhs.matrix[4] + tempMatrix[14] * rhs.matrix[8] + tempMatrix[15] * rhs.matrix[12];
-		matrix[13] = tempMatrix[12] * rhs.matrix[1] + tempMatrix[13] * rhs.matrix[5] + tempMatrix[14] * rhs.matrix[9] + tempMatrix[15] * rhs.matrix[13];
-		matrix[14] = tempMatrix[12] * rhs.matrix[2] + tempMatrix[13] * rhs.matrix[6] + tempMatrix[14] * rhs.matrix[10] + tempMatrix[15] * rhs.matrix[14];
-		matrix[15] = tempMatrix[12] * rhs.matrix[3] + tempMatrix[13] * rhs.matrix[7] + tempMatrix[14] * rhs.matrix[11] + tempMatrix[15] * rhs.matrix[15];
+		for (int row = 0; row < 4; ++row)
+		{
+			for (int col = 0; col < 4; ++col)
+			{
+				matrix[row * 4 + col] =
+					tempMatrix[row * 4 + 0] * rhs.matrix[0 * 4 + col] +
+					tempMatrix[row * 4 + 1] * rhs.matrix[1 * 4 + col] +
+					tempMatrix[row * 4 + 2] * rhs.matrix[2 * 4 + col] +
+					tempMatrix[row * 4 + 3] * rhs.matrix[3 * 4 + col];
+			}
+		}
 
 		return *this;
 	}
