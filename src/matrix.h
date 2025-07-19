@@ -3,7 +3,6 @@
 #include "commonUtils.h"
 #include <array>
 
-//typedef float matrix4x4_multi[4][4];
 
 typedef struct Matrix4x4
 {
@@ -11,7 +10,6 @@ typedef struct Matrix4x4
 	Matrix4x4(std::array<float, 16> inMatrix);
 
 	float* getData();
-	//matrix4x4_multi* getDataMultidimensional();
 
 	//Sets the matrix to the identity matrix. THIS WILL OVERWRITE ANY DATA IN THE MATRIX
 	void setToIdentity();
@@ -28,7 +26,6 @@ typedef struct Matrix4x4
 private:
 	//Elements are stored in ROW-MAJOR order
 	float matrix[16];
-	//matrix4x4_multi matrixMultidimensional;
 public:
 
 
@@ -122,5 +119,6 @@ inline Matrix4x4 operator*(const Matrix4x4& lhs, const float& rhs)
 Matrix4x4 createTransformationMatrix(Vector3f translation, Vector3f rotation, Vector3f scale);
 Matrix4x4 createViewMatrix(Vector3f position, Vector3f rotation);
 Matrix4x4 createProjectionMatrix(float fov, float aspectRatio, float nearPlane, float farPlane);
+Matrix4x4 createOrthographicProjectionMatrix(float left, float right, float top, float bottom, float nearPlane, float farPlane);
 
 float degreesToRadians(float degrees);

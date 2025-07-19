@@ -25,31 +25,6 @@ float* Matrix4x4::getData()
 	return matrix;
 }
 
-/*
-matrix4x4_multi* Matrix4x4::getDataMultidimensional()
-{
-	matrixMultidimensional[0][0] = matrix[0];
-	matrixMultidimensional[0][1] = matrix[1];
-	matrixMultidimensional[0][2] = matrix[2];
-	matrixMultidimensional[0][3] = matrix[3];
-
-	matrixMultidimensional[1][0] = matrix[4];
-	matrixMultidimensional[1][1] = matrix[5];
-	matrixMultidimensional[1][2] = matrix[6];
-	matrixMultidimensional[1][3] = matrix[7];
-
-	matrixMultidimensional[2][0] = matrix[8];
-	matrixMultidimensional[2][1] = matrix[9];
-	matrixMultidimensional[2][2] = matrix[10];
-	matrixMultidimensional[2][3] = matrix[11];
-
-	matrixMultidimensional[3][0] = matrix[12];
-	matrixMultidimensional[3][1] = matrix[13];
-	matrixMultidimensional[3][2] = matrix[14];
-	matrixMultidimensional[3][3] = matrix[15];
-
-	return &matrixMultidimensional;
-}*/
 
 void Matrix4x4::setToIdentity()
 {
@@ -192,6 +167,27 @@ Matrix4x4 createProjectionMatrix(float fov, float aspectRatio, float nearPlane, 
 	projectionMatrix.getData()[10] = (farPlane + nearPlane) / frustumLength;
 	projectionMatrix.getData()[11] = (2.0f * farPlane * nearPlane) / frustumLength;
 	projectionMatrix.getData()[14] = -1.0f;
+
+	return projectionMatrix;
+}
+
+Matrix4x4 createOrthographicProjectionMatrix(float left, float right, float top, float bottom, float nearPlane, float farPlane)
+{
+	Matrix4x4 projectionMatrix;
+	projectionMatrix.setToIdentity();
+
+	float width = right - left;
+	float height = top - bottom;
+	float depth = farPlane - nearPlane;
+
+	//ROW MAJOR ORDER
+	projectionMatrix.getData()[0] = 2.0f / width; // [0][0]
+	projectionMatrix.getData()[5] = 2.0f / height; // [1][1]
+	projectionMatrix.getData()[10] = -2.0f / depth; // [2][2]
+	projectionMatrix.getData()[12] = -(right + left) / width; // [0][3]
+	projectionMatrix.getData()[13] = -(top + bottom) / height; // [1][3]
+	projectionMatrix.getData()[14] = -(farPlane + nearPlane) / depth; // [2][3]
+	projectionMatrix.getData()[15] = 1.0f; // [3][3]
 
 	return projectionMatrix;
 }
