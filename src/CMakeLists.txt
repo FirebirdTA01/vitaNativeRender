@@ -1,4 +1,4 @@
-add_executable(${PROJECT_NAME} main.cpp matrix.h matrix.cpp commonUtils.h camera.h camera.cpp)
+add_executable(${PROJECT_NAME} main.cpp matrix.h matrix.cpp commonUtils.h camera.h camera.cpp EMP_Logo.h EMP_Logo_Alpha.h light.h light.cpp)
 add_dependencies(${PROJECT_NAME} Shaders)
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".elf")
 
@@ -37,7 +37,7 @@ foreach(shader ${SHADER_SRC})
     # Compile cg to gxp
     add_custom_command(
         OUTPUT ${shader_gxp}
-        COMMAND psp2cgc -profile ${SHADER_PROFILE} ${SHADER_FILENAME_WITH_EXTENSION} -o ${shader_gxp}
+        COMMAND psp2cgc -profile ${SHADER_PROFILE} ${SHADER_FILENAME_WITH_EXTENSION} -O3 -o ${shader_gxp}
         DEPENDS ${shader}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/Shaders
         COMMENT "Compiling ${shader} to ${shader_gxp}"
