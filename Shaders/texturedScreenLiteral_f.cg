@@ -1,0 +1,17 @@
+void main(
+	float2 pass_texCoord : TEXCOORD0,
+	float pass_alpha : COLOR,
+	uniform sampler2D u_texture,
+	out float4 out_color : COLOR)
+{
+	float4 unblended_color = tex2D(u_texture, pass_texCoord);
+	
+	// Discard fragments if the alpha is below a threshold
+    if (unblended_color.a < 0.1)
+    {
+        discard;
+    }
+
+	out_color = float4(unblended_color.x, unblended_color.y, unblended_color.z, pass_alpha * unblended_color.a);
+	//out_color = float4(finalR, finalG, finalB, pass_alpha * finalA);
+}

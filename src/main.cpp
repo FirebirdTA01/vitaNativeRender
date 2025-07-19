@@ -7,10 +7,14 @@
 #include <vector>
 #include <stdlib.h> // For malloc, free
 #include <string.h> // For memcpy
+#include <random>
 
 #include "commonUtils.h"
 #include "matrix.h"
 #include "camera.h"
+#include "light.h"
+#include "EMP_Logo.h"
+#include "EMP_Logo_Alpha.h"
 
 #define DISPLAY_WIDTH 960 // Default display width in pixels
 #define DISPLAY_HEIGHT 544 // Default display height in pixels
@@ -126,11 +130,23 @@ extern unsigned char _binary_cube_v_gxp_start;
 extern unsigned char _binary_cube_f_gxp_start;
 extern unsigned char _binary_basic_v_gxp_start;
 extern unsigned char _binary_basic_f_gxp_start;
+extern unsigned char _binary_textured_v_gxp_start;
+extern unsigned char _binary_textured_f_gxp_start;
+extern unsigned char _binary_texturedScreenLiteral_v_gxp_start;
+extern unsigned char _binary_texturedScreenLiteral_f_gxp_start;
+extern unsigned char _binary_texturedLit_v_gxp_start;
+extern unsigned char _binary_texturedLit_f_gxp_start;
 
 static const SceGxmProgram* const gxmProgClearVertexGxp = (SceGxmProgram*)&_binary_clear_v_gxp_start;
 static const SceGxmProgram* const gxmProgClearFragmentGxp = (SceGxmProgram*)&_binary_clear_f_gxp_start;
 static const SceGxmProgram* const gxmProgBasicVertexGxp = (SceGxmProgram*)&_binary_basic_v_gxp_start;
 static const SceGxmProgram* const gxmProgBasicFragmentGxp = (SceGxmProgram*)&_binary_basic_f_gxp_start;
+static const SceGxmProgram* const gxmProgTexturedVertexGxp = (SceGxmProgram*)&_binary_textured_v_gxp_start;
+static const SceGxmProgram* const gxmProgTexturedFragmentGxp = (SceGxmProgram*)&_binary_textured_f_gxp_start;
+static const SceGxmProgram* const gxmProgTexturedScreenLiteralVertexGxp = (SceGxmProgram*)&_binary_texturedScreenLiteral_v_gxp_start;
+static const SceGxmProgram* const gxmProgTexturedScreenLiteralFragmentGxp = (SceGxmProgram*)&_binary_texturedScreenLiteral_f_gxp_start;
+static const SceGxmProgram* const gxmProgTexturedLitVertexGxp = (SceGxmProgram*)&_binary_texturedLit_v_gxp_start;
+static const SceGxmProgram* const gxmProgTexturedLitFragmentGxp = (SceGxmProgram*)&_binary_texturedLit_f_gxp_start;
 
 static SceGxmShaderPatcherId gxmClearVertexProgramID;
 static SceGxmShaderPatcherId gxmClearFragmentProgramID;
@@ -153,6 +169,67 @@ static const SceGxmProgramParameter* gxmBasicVertexProgram_u_viewMatrixParam;
 static const SceGxmProgramParameter* gxmBasicVertexProgram_u_projectionMatrixParam;
 static SceGxmVertexProgram* gxmBasicVertexProgramPatched;
 static SceGxmFragmentProgram* gxmBasicFragmentProgramPatched;
+
+static SceGxmShaderPatcherId gxmTexturedVertexProgramID;
+static SceGxmShaderPatcherId gxmTexturedFragmentProgramID;
+static const SceGxmProgramParameter* gxmTexturedVertexProgram_positionParam;
+static const SceGxmProgramParameter* gxmTexturedVertexProgram_texCoordParam;
+static const SceGxmProgramParameter* gxmTexturedVertexProgram_u_modelMatrixParam;
+static const SceGxmProgramParameter* gxmTexturedVertexProgram_u_viewMatrixParam;
+static const SceGxmProgramParameter* gxmTexturedVertexProgram_u_projectionMatrixParam;
+static const SceGxmProgramParameter* gxmTexturedFragmentProgram_u_textureParam;
+static SceGxmVertexProgram* gxmTexturedVertexProgramPatched;
+static SceGxmFragmentProgram* gxmTexturedFragmentProgramPatched;
+
+static SceGxmShaderPatcherId gxmTexturedScreenLiteralVertexProgramID;
+static SceGxmShaderPatcherId gxmTexturedScreenLiteralFragmentProgramID;
+static const SceGxmProgramParameter* gxmTexturedScreenLiteralVertexProgram_positionParam;
+static const SceGxmProgramParameter* gxmTexturedScreenLiteralVertexProgram_texCoordParam;
+static const SceGxmProgramParameter* gxmTexturedScreenLiteralVertexProgram_u_alphaParam;
+static const SceGxmProgramParameter* gxmTexturedScreenLiteralVertexProgram_u_transformParam;
+static const SceGxmProgramParameter* gxmTexturedScreenLiteralFragmentProgram_u_textureParam;
+static SceGxmVertexProgram* gxmTexturedScreenLiteralVertexProgramPatched;
+static SceGxmFragmentProgram* gxmTexturedScreenLiteralFragmentProgramPatched;
+
+static SceGxmShaderPatcherId gxmTexturedLitVertexProgramID;
+static SceGxmShaderPatcherId gxmTexturedLitFragmentProgramID;
+static const SceGxmProgramParameter* gxmTexturedLitVertexProgram_positionParam;
+static const SceGxmProgramParameter* gxmTexturedLitVertexProgram_texCoordParam;
+static const SceGxmProgramParameter* gxmTexturedLitVertexProgram_normalParam;
+static const SceGxmProgramParameter* gxmTexturedLitVertexProgram_u_modelMatrixParam;
+static const SceGxmProgramParameter* gxmTexturedLitVertexProgram_u_viewMatrixParam;
+static const SceGxmProgramParameter* gxmTexturedLitVertexProgram_u_projectionMatrixParam;
+static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightCountParam;
+static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightPositionsParam;
+static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightColorsParam;
+static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightPowersParam;
+static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightRadiiParam;
+
+static SceGxmVertexProgram* gxmTexturedLitVertexProgramPatched;
+static SceGxmFragmentProgram* gxmTexturedLitFragmentProgramPatched;
+
+//Used by Lit Textured Shader
+struct PerFrameVertexUniforms
+{
+	float viewMatrix[16];
+	float projectionMatrix[16];
+};
+
+struct PerFrameFragmentUniforms
+{
+	uint32_t lightCount;			// 4 bytes
+	uint8_t padding[4];				// 4 bytes
+	float lightPositions[8][4];		// 128 bytes (8 vec4s)
+	float lightColors[8][4];		// 128 bytes (8 vec4s)
+	float lightPowers[8];			// 32 bytes (8 floats)
+	float lightRadii[8];			// 32 bytes (8 floats)
+	float cameraPosition[3];		// 12 bytes (vec3)
+};
+
+SceUID perFrameVertexUniformBufferUID;
+SceUID perFrameFragmentUniformBufferUID;
+PerFrameVertexUniforms* perFrameVertexUniformBuffer;
+PerFrameFragmentUniforms* perFrameFragmentUniformBuffer;
 
 Color clearColor(0.0f, 0.1f, 0.15f, 1.0f); // Clear screen color
 
@@ -377,6 +454,28 @@ void gpuFragmentUsseFreeUnmap(SceUID uid)
 
 	sceGxmUnmapFragmentUsseMemory(addr);
 	sceKernelFreeMemBlock(uid);
+}
+
+//used for the reused/persistent uniform buffers by the lit textured shader
+void initializeUniformBuffers()
+{
+	perFrameVertexUniformBuffer = (PerFrameVertexUniforms*)gpuAllocMap(
+		sizeof(PerFrameVertexUniforms), 
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, //SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW (test which is faster)
+		SCE_GXM_MEMORY_ATTRIB_READ, 
+		&perFrameVertexUniformBufferUID);
+
+	perFrameFragmentUniformBuffer = (PerFrameFragmentUniforms*)gpuAllocMap(
+		sizeof(PerFrameFragmentUniforms),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, //SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW
+		SCE_GXM_MEMORY_ATTRIB_READ,
+		&perFrameFragmentUniformBufferUID);
+}
+
+void freeUniformBuffers()
+{
+	gpuFreeUnmap(perFrameVertexUniformBufferUID);
+	gpuFreeUnmap(perFrameFragmentUniformBufferUID);
 }
 
 
@@ -713,6 +812,8 @@ bool findGxmShaderUniformByName(const SceGxmProgram* program, const char* name, 
 		if (sceGxmProgramParameterGetCategory(*outParamId) == SCE_GXM_PARAMETER_CATEGORY_UNIFORM)
 		{
 			sceClibPrintf("sceGxmProgramFindParameterByName(%p, \"%s\") returned uniform at address: %p\n", program, name, *outParamId);
+			unsigned int containerIndex = sceGxmProgramParameterGetContainerIndex(*outParamId);
+			sceClibPrintf("Uniform at address: %p exists in container index %u\n", *outParamId, containerIndex);
 			return true;
 		}
 		else
@@ -880,6 +981,238 @@ void createShaders()
 	{
 		sceClibPrintf("basic FragmentProgram creation failed\n");
 	}
+
+	/*
+	*   Texture Shader
+	*/
+
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTexturedVertexGxp, &gxmTexturedVertexProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(texturedVertexProgramGxp): 0x%08X\n", err);
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTexturedFragmentGxp, &gxmTexturedFragmentProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(texturedFragmentProgramGxp): 0x%08X\n", err);
+
+	const SceGxmProgram* texturedVertexProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTexturedVertexProgramID);
+
+	findGxmShaderAttributeByName(texturedVertexProgram, "position", &gxmTexturedVertexProgram_positionParam);
+	findGxmShaderAttributeByName(texturedVertexProgram, "texCoord", &gxmTexturedVertexProgram_texCoordParam);
+	findGxmShaderUniformByName(texturedVertexProgram, "u_modelMatrix", &gxmTexturedVertexProgram_u_modelMatrixParam);
+	findGxmShaderUniformByName(texturedVertexProgram, "u_viewMatrix", &gxmTexturedVertexProgram_u_viewMatrixParam);
+	findGxmShaderUniformByName(texturedVertexProgram, "u_projectionMatrix", &gxmTexturedVertexProgram_u_projectionMatrixParam);
+
+	sceClibPrintf("textured PositionParam at address: %p\n", (void*)gxmTexturedVertexProgram_positionParam);
+	sceClibPrintf("textured TexCoordParam at address: %p\n", (void*)gxmTexturedVertexProgram_texCoordParam);
+
+	// Blend info
+	SceGxmBlendInfo blendInfo;
+	//sceClibMemset(&blendInfo, 0, sizeof(SceGxmBlendInfo));
+	blendInfo.colorMask = SCE_GXM_COLOR_MASK_ALL; // Write to all color channels
+	blendInfo.colorFunc = SCE_GXM_BLEND_FUNC_ADD; // Add the source and destination colors
+	blendInfo.alphaFunc = SCE_GXM_BLEND_FUNC_ADD; // Add the source and destination alphas
+	blendInfo.colorSrc = SCE_GXM_BLEND_FACTOR_SRC_ALPHA; // Multiply the source color by the source alpha
+	blendInfo.colorDst = SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // Multiply the destination color by 1-src alpha
+	blendInfo.alphaSrc = SCE_GXM_BLEND_FACTOR_SRC_ALPHA; // For alpha, use the source alpha
+	blendInfo.alphaDst = SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // For destination, use 1-src alpha
+
+	SceGxmVertexAttribute textured_vertex_attributes[2];
+	SceGxmVertexStream textured_vertex_stream;
+	textured_vertex_attributes[0].streamIndex = 0;
+	textured_vertex_attributes[0].offset = 0;
+	textured_vertex_attributes[0].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	textured_vertex_attributes[0].componentCount = 3;
+	textured_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedVertexProgram_positionParam);
+	textured_vertex_attributes[1].streamIndex = 0;
+	textured_vertex_attributes[1].offset = offsetof(UnlitTexturedVertex, uv); //sizeof(vector3f);
+	textured_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	textured_vertex_attributes[1].componentCount = 2;
+	textured_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedVertexProgram_texCoordParam);
+	textured_vertex_stream.stride = sizeof(struct UnlitTexturedVertex);
+	textured_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
+
+	err = sceGxmShaderPatcherCreateVertexProgram(gxmShaderPatcher,
+		gxmTexturedVertexProgramID, textured_vertex_attributes,
+		2, &textured_vertex_stream, 1, &gxmTexturedVertexProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("textured VertexProgram created at address: %p\n", (void*)gxmTexturedVertexProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("textured VertexProgram creation failed\n");
+	}
+
+	err = sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher,
+		gxmTexturedFragmentProgramID, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+		gxmMultisampleMode, &blendInfo, texturedVertexProgram,
+		&gxmTexturedFragmentProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("textured FragmentProgram created at address: %p\n", (void*)gxmTexturedFragmentProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("textured FragmentProgram creation failed\n");
+	}
+
+	/*
+	*   Textured Screen Literal Shader
+	*/
+
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTexturedScreenLiteralVertexGxp, &gxmTexturedScreenLiteralVertexProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(texturedScreenLiteralVertexProgramGxp): 0x%08X\n", err);
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTexturedScreenLiteralFragmentGxp, &gxmTexturedScreenLiteralFragmentProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(texturedScreenLiteralFragmentProgramGxp): 0x%08X\n", err);
+
+	const SceGxmProgram* texturedScreenLiteralVertexProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTexturedScreenLiteralVertexProgramID);
+	const SceGxmProgram* texturedScreenLiteralFragmentProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTexturedScreenLiteralFragmentProgramID);
+
+	findGxmShaderAttributeByName(texturedScreenLiteralVertexProgram, "position", &gxmTexturedScreenLiteralVertexProgram_positionParam);
+	findGxmShaderAttributeByName(texturedScreenLiteralVertexProgram, "texCoord", &gxmTexturedScreenLiteralVertexProgram_texCoordParam);
+	findGxmShaderUniformByName(texturedScreenLiteralVertexProgram, "u_alpha", &gxmTexturedScreenLiteralVertexProgram_u_alphaParam);
+	findGxmShaderUniformByName(texturedScreenLiteralVertexProgram, "u_transform", &gxmTexturedScreenLiteralVertexProgram_u_transformParam);
+
+
+	sceClibPrintf("textured PositionParam at address: %p\n", (void*)gxmTexturedVertexProgram_positionParam);
+	sceClibPrintf("textured TexCoordParam at address: %p\n", (void*)gxmTexturedVertexProgram_texCoordParam);
+	sceClibPrintf("textured AlphaParam at address: %p\n", (void*)gxmTexturedScreenLiteralVertexProgram_u_alphaParam);
+	sceClibPrintf("textured TransformParam at address: %p\n", (void*)gxmTexturedScreenLiteralVertexProgram_u_transformParam);
+
+	SceGxmVertexAttribute texturedScreenLiteral_vertex_attributes[2];
+	SceGxmVertexStream texturedScreenLiteral_vertex_stream;
+	texturedScreenLiteral_vertex_attributes[0].streamIndex = 0;
+	texturedScreenLiteral_vertex_attributes[0].offset = 0;
+	texturedScreenLiteral_vertex_attributes[0].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedScreenLiteral_vertex_attributes[0].componentCount = 3;
+	texturedScreenLiteral_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedScreenLiteralVertexProgram_positionParam);
+	texturedScreenLiteral_vertex_attributes[1].streamIndex = 0;
+	texturedScreenLiteral_vertex_attributes[1].offset = offsetof(UnlitTexturedVertex, uv); //sizeof(vector3f);
+	texturedScreenLiteral_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedScreenLiteral_vertex_attributes[1].componentCount = 2;
+	texturedScreenLiteral_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedScreenLiteralVertexProgram_texCoordParam);
+	texturedScreenLiteral_vertex_stream.stride = sizeof(struct UnlitTexturedVertex);
+	texturedScreenLiteral_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
+
+	sceClibPrintf("Creating texturedScreenLiteral VertexProgram\n");
+	err = sceGxmShaderPatcherCreateVertexProgram(gxmShaderPatcher,
+		gxmTexturedScreenLiteralVertexProgramID, texturedScreenLiteral_vertex_attributes,
+		2, &texturedScreenLiteral_vertex_stream, 1, &gxmTexturedScreenLiteralVertexProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("texturedScreenLiteral VertexProgram created at address: %p\n", (void*)gxmTexturedScreenLiteralVertexProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("texturedScreenLiteral VertexProgram creation failed\n");
+	}
+
+	sceClibPrintf("Creating texturedScreenLiteral FragmentProgram\n");
+	err = sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher,
+		gxmTexturedScreenLiteralFragmentProgramID, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+		gxmMultisampleMode, &blendInfo, texturedScreenLiteralVertexProgram,
+		&gxmTexturedScreenLiteralFragmentProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("texturedScreenLiteral FragmentProgram created at address: %p\n", (void*)gxmTexturedScreenLiteralFragmentProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("texturedScreenLiteral FragmentProgram creation failed\n");
+	}
+
+	/*
+	*	TexturedLit Shader
+	*/
+
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTexturedLitVertexGxp, &gxmTexturedLitVertexProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(texturedLitVertexProgramGxp): 0x%08X\n", err);
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTexturedLitFragmentGxp, &gxmTexturedLitFragmentProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(texturedLitFragmentProgramGxp): 0x%08X\n", err);
+
+	const SceGxmProgram* texturedLitVertexProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTexturedLitVertexProgramID);
+	const SceGxmProgram* texturedLitFragmentProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTexturedLitFragmentProgramID);
+
+	findGxmShaderAttributeByName(texturedLitVertexProgram, "position", &gxmTexturedLitVertexProgram_positionParam);
+	findGxmShaderAttributeByName(texturedLitVertexProgram, "texCoord", &gxmTexturedLitVertexProgram_texCoordParam);
+	findGxmShaderAttributeByName(texturedLitVertexProgram, "normal", &gxmTexturedLitVertexProgram_normalParam);
+	findGxmShaderUniformByName(texturedLitVertexProgram, "u_modelMatrix", &gxmTexturedLitVertexProgram_u_modelMatrixParam);
+	findGxmShaderUniformByName(texturedLitVertexProgram, "u_perVFrame.u_viewMatrix", &gxmTexturedLitVertexProgram_u_viewMatrixParam);
+	findGxmShaderUniformByName(texturedLitVertexProgram, "u_perVFrame.u_projectionMatrix", &gxmTexturedLitVertexProgram_u_projectionMatrixParam);
+	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_perPFrame.u_lightCount", &gxmTexturedLitFragmentProgram_u_lightCountParam);
+	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_perPFrame.u_lightColors", &gxmTexturedLitFragmentProgram_u_lightColorsParam);
+	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_perPFrame.u_lightPowers", &gxmTexturedLitFragmentProgram_u_lightPowersParam);
+	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_perPFrame.u_lightRadii", &gxmTexturedLitFragmentProgram_u_lightRadiiParam);
+	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_lightPositions", &gxmTexturedLitFragmentProgram_u_lightPositionsParam);
+
+	sceClibPrintf("texturedLit PositionParam at address: %p\n", (void*)gxmTexturedLitVertexProgram_positionParam);
+	sceClibPrintf("texturedLit TexCoordParam at address: %p\n", (void*)gxmTexturedLitVertexProgram_texCoordParam);
+	sceClibPrintf("texturedLit NormalParam at address: %p\n", (void*)gxmTexturedLitVertexProgram_normalParam);
+	sceClibPrintf("texturedLit ModelMatrixParam at address: %p\n", (void*)gxmTexturedLitVertexProgram_u_modelMatrixParam);
+	sceClibPrintf("texturedLit ViewMatrixParam at address: %p\n", (void*)gxmTexturedLitVertexProgram_u_viewMatrixParam);
+	sceClibPrintf("texturedLit ProjectionMatrixParam at address: %p\n", (void*)gxmTexturedLitVertexProgram_u_projectionMatrixParam);
+	sceClibPrintf("texturedLit LightCountParam at address: %p\n", (void*)gxmTexturedLitFragmentProgram_u_lightCountParam);
+	sceClibPrintf("texturedLit LightPositionsParam at address: %p\n", (void*)gxmTexturedLitFragmentProgram_u_lightPositionsParam);
+	sceClibPrintf("texturedLit LightColorsParam at address: %p\n", (void*)gxmTexturedLitFragmentProgram_u_lightColorsParam);
+	sceClibPrintf("texturedLit LightPowersParam at address: %p\n", (void*)gxmTexturedLitFragmentProgram_u_lightPowersParam);
+	sceClibPrintf("texturedLit LightRadiiParam at address: %p\n", (void*)gxmTexturedLitFragmentProgram_u_lightRadiiParam);
+
+	SceGxmVertexAttribute texturedLit_vertex_attributes[3];
+	SceGxmVertexStream texturedLit_vertex_stream;
+	texturedLit_vertex_attributes[0].streamIndex = 0;
+	texturedLit_vertex_attributes[0].offset = 0;
+	texturedLit_vertex_attributes[0].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLit_vertex_attributes[0].componentCount = 3;
+	texturedLit_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitVertexProgram_positionParam);
+	texturedLit_vertex_attributes[1].streamIndex = 0;
+	texturedLit_vertex_attributes[1].offset = offsetof(TexturedVertex, uv); //sizeof(vector3f);
+	texturedLit_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLit_vertex_attributes[1].componentCount = 2;
+	texturedLit_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitVertexProgram_texCoordParam);
+	texturedLit_vertex_attributes[2].streamIndex = 0;
+	texturedLit_vertex_attributes[2].offset = offsetof(TexturedVertex, normal); //sizeof(vector3f) + sizeof(vector2f);
+	texturedLit_vertex_attributes[2].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLit_vertex_attributes[2].componentCount = 3;
+	texturedLit_vertex_attributes[2].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitVertexProgram_normalParam);
+	texturedLit_vertex_stream.stride = sizeof(struct TexturedVertex);
+	texturedLit_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
+
+	err = sceGxmShaderPatcherCreateVertexProgram(gxmShaderPatcher,
+		gxmTexturedLitVertexProgramID, texturedLit_vertex_attributes,
+		3, &texturedLit_vertex_stream, 1, &gxmTexturedLitVertexProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("texturedLit VertexProgram created at address: %p\n", (void*)gxmTexturedLitVertexProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("texturedLit VertexProgram creation failed\n");
+	}
+
+	err = sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher,
+		gxmTexturedLitFragmentProgramID, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+		gxmMultisampleMode, NULL, texturedLitVertexProgram,
+		&gxmTexturedLitFragmentProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("texturedLit FragmentProgram created at address: %p\n", (void*)gxmTexturedLitFragmentProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("texturedLit FragmentProgram creation failed\n");
+	}
+
+	//Now allocate persistent memory for the per-frame uniforms used by the lit shader
+	initializeUniformBuffers();
 }
 
 void clearScreen()
@@ -1024,42 +1357,368 @@ int main()
 		1, 7, 3, 3, 7, 5
 	};
 
-	//allocate memory for the vertex data
-	sceClibPrintf("Allocating memory for the vertex data\n");
-	SceUID vertexDataUID, indexDataUID;
+	// Each face is defined in “face space” with its own 4 vertices:
+	// UVs: bottom-left (0,0), bottom-right (1,0), top-right (1,1), top-left (0,1)
+	std::vector<UnlitTexturedVertex> texturedCubeVertices =
+	{
+		// Front face (z = +CUBE_HALF_SIZE)
+		UnlitTexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f), // 0: BL
+		UnlitTexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f), // 1: BR
+		UnlitTexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f), // 2: TR
+		UnlitTexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f), // 3: TL
 
-	UnlitColorVertex* vertexData = (UnlitColorVertex*)gpuAllocMap(cubeVertices.size() * sizeof(UnlitColorVertex), 
-		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ, 
-		&vertexDataUID);
+		// Right face (x = +CUBE_HALF_SIZE)
+		UnlitTexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f), // 4: BL (front lower)
+		UnlitTexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f), // 5: BR (back lower)
+		UnlitTexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f), // 6: TR (back upper)
+		UnlitTexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f), // 7: TL (front upper)
+
+		// Back face (z = -CUBE_HALF_SIZE)
+		// When viewed from the back the “local” bottom-left is (CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE)
+		UnlitTexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f), // 8: BL
+		UnlitTexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f), // 9: BR
+		UnlitTexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f), // 10: TR
+		UnlitTexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f), // 11: TL
+
+		// Left face (x = -CUBE_HALF_SIZE)
+		// Viewed from the left, the bottom-left is (-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE)
+		UnlitTexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f), // 12: BL
+		UnlitTexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f), // 13: BR
+		UnlitTexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f), // 14: TR
+		UnlitTexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f), // 15: TL
+
+		// Top face (y = +CUBE_HALF_SIZE)
+		// Viewed from above, we define the vertices so that the lower edge corresponds to z = +CUBE_HALF_SIZE.
+		UnlitTexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f), // 16: BL
+		UnlitTexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f), // 17: BR
+		UnlitTexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f), // 18: TR
+		UnlitTexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f), // 19: TL
+
+		// Bottom face (y = -CUBE_HALF_SIZE)
+		// Viewed from below, the bottom-left is defined as (-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE)
+		UnlitTexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f), // 20: BL
+		UnlitTexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f), // 21: BR
+		UnlitTexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f), // 22: TR
+		UnlitTexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f)  // 23: TL
+	};
+
+	std::vector<TexturedVertex> litTexturedCubeVertices =
+	{
+		// Front face (Z+)
+		TexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f, 0.0f, 0.0f, 1.0f), // 0: BL
+		TexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f, 0.0f, 0.0f, 1.0f), // 1: BR
+		TexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f, 0.0f, 0.0f, 1.0f), // 2: TR
+		TexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f, 0.0f, 0.0f, 1.0f), // 3: TL
+
+		// Right face (X+)
+		TexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f, 1.0f, 0.0f, 0.0f), // 4: BL 
+		TexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f, 1.0f, 0.0f, 0.0f), // 5: BR 
+		TexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f, 1.0f, 0.0f, 0.0f), // 6: TR 
+		TexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f, 1.0f, 0.0f, 0.0f), // 7: TL 
+
+		// Back face (Z-) - FIXED NORMAL DIRECTION
+		TexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f, 0.0f, 0.0f, -1.0f), // 8: BL
+		TexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f, 0.0f, 0.0f, -1.0f), // 9: BR
+		TexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f, 0.0f, 0.0f, -1.0f), // 10: TR
+		TexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f, 0.0f, 0.0f, -1.0f), // 11: TL
+
+		// Left face (X-)
+		TexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f, -1.0f, 0.0f, 0.0f), // 12: BL
+		TexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f, -1.0f, 0.0f, 0.0f), // 13: BR
+		TexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f, -1.0f, 0.0f, 0.0f), // 14: TR
+		TexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f, -1.0f, 0.0f, 0.0f), // 15: TL
+
+		// Top face (Y+)
+		TexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f, 0.0f, 1.0f, 0.0f), // 16: BL
+		TexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f, 0.0f, 1.0f, 0.0f), // 17: BR
+		TexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f, 0.0f, 1.0f, 0.0f), // 18: TR
+		TexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f, 0.0f, 1.0f, 0.0f), // 19: TL
+
+		// Bottom face (Y-)
+		TexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f, 0.0f, -1.0f, 0.0f), // 20: BL
+		TexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f, 0.0f, -1.0f, 0.0f), // 21: BR
+		TexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f, 0.0f, -1.0f, 0.0f), // 22: TR
+		TexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f, 0.0f, -1.0f, 0.0f)  // 23: TL
+	};
+
+	static const unsigned short texturedCubeIndices[36] =
+	{
+		// Front face
+		0,  1,  2,
+		0,  2,  3,
+
+		// Right face
+		4,  5,  6,
+		4,  6,  7,
+
+		// Back face
+		8,  9,  10,
+		8,  10, 11,
+
+		// Left face
+		12, 13, 14,
+		12, 14, 15,
+
+		// Top face
+		16, 17, 18,
+		16, 18, 19,
+
+		// Bottom face
+		20, 21, 22,
+		20, 22, 23
+	};
+
+	//Another more different way to define the data
+	std::vector<Vector3f> _surfacePositions =
+	{
+		{ -1.0f, 1.0f,  0.0f }, //top left
+		{ -1.0f, -1.0f, 0.0f }, //bottom left
+		{ 1.0f,  -1.0f, 0.0f }, //bottom right
+		{ 1.0f,  1.0f,  0.0f }  //top right
+	};
+	std::vector<Vector2f> _surfaceUVs =
+	{
+		{ 0, 0 }, //top left
+		{ 0, 1 }, //bottom left
+		{ 1, 1 }, //bottom right
+		{ 1, 0 }  //top right
+	};
+	std::vector<unsigned int> _surfaceIndices =
+	{
+		0, 1, 3,
+		3, 1, 2
+	};
+
+	//allocate memory for the vertex data
+	sceClibPrintf("Allocating memory for the vertex data...\n");
+	SceUID colorCubeVertexDataUID, texturedCubeVertexDataUID, litTexturedCubeVertexDataUID, surfaceVertexDataUID, indexDataUID, texturedIndexDataUID, surfaceIndexDataUID;
+
+	sceClibPrintf("...colored cube vertex data\n");
+	UnlitColorVertex* cVertexData = (UnlitColorVertex*)gpuAllocMap(cubeVertices.size() * sizeof(UnlitColorVertex),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ,
+		&colorCubeVertexDataUID);
+
+	sceClibPrintf("...textured cube vertex data\n");
+	UnlitTexturedVertex* tVertexData = (UnlitTexturedVertex*)gpuAllocMap(24 * sizeof(UnlitTexturedVertex),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&texturedCubeVertexDataUID);
+
+	sceClibPrintf("...lit textured cube vertex data\n");
+	TexturedVertex* ltVertexData = (TexturedVertex*)gpuAllocMap(litTexturedCubeVertices.size() * sizeof(TexturedVertex),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&litTexturedCubeVertexDataUID);
+
+	sceClibPrintf("...surface vertex data\n");
+	UnlitTexturedVertex* sVertexData = (UnlitTexturedVertex*)gpuAllocMap(4 * sizeof(UnlitTexturedVertex),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&surfaceVertexDataUID);
+
 	sceClibPrintf("Allocating memory for the index data\n");
-	unsigned short* indexData = (unsigned short*)gpuAllocMap(cubeIndices.size() * sizeof(unsigned short), 
-		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ, 
+	unsigned short* indexData = (unsigned short*)gpuAllocMap(cubeIndices.size() * sizeof(unsigned short),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
 		&indexDataUID);
+
+	//used for both the textured cube and the lit textured cube
+	unsigned short* texturedIndexData = (unsigned short*)gpuAllocMap(36 * sizeof(unsigned short),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&texturedIndexDataUID);
+
+	unsigned int* surfaceIndexData = (unsigned int*)gpuAllocMap(_surfaceIndices.size() * sizeof(unsigned int),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&surfaceIndexDataUID);
 
 	//interweave the position and colors into Vertex struct
 	for (int i = 0; i < cubeVertices.size(); i++)
 	{
-		vertexData[i] = (struct UnlitColorVertex){ cubeVertices[i].x, cubeVertices[i].y, cubeVertices[i].z, cubeVerticesColor[i] };
+		cVertexData[i] = (struct UnlitColorVertex){ cubeVertices[i].x, cubeVertices[i].y, cubeVertices[i].z, cubeVerticesColor[i] };
 	}
+	//interweave the surface position and UVs into Vertex struct
+	for (int i = 0; i < _surfacePositions.size(); i++)
+	{
+		sVertexData[i] = (struct UnlitTexturedVertex){ _surfacePositions[i].x, _surfacePositions[i].y, _surfacePositions[i].z, _surfaceUVs[i].x, _surfaceUVs[i].y };
+	}
+	memcpy(tVertexData, texturedCubeVertices.data(), 24 * sizeof(UnlitTexturedVertex));
+	memcpy(ltVertexData, litTexturedCubeVertices.data(), litTexturedCubeVertices.size() * sizeof(TexturedVertex));
 	//copy the index data
 	memcpy(indexData, cubeIndices.data(), cubeIndices.size() * sizeof(unsigned short));
+	memcpy(texturedIndexData, texturedCubeIndices, 36 * sizeof(unsigned short));
+	memcpy(surfaceIndexData, _surfaceIndices.data(), _surfaceIndices.size() * sizeof(unsigned int));
 	//for (int i = 0; i < cubeIndices.size(); i++)
 	//{
 	//	indexData[i] = cubeIndices[i];
 	//}
 
+	// Allocate memory for the texture data and load the texture
+	SceGxmTexture texture, alphaTexture, allWhiteTexture;
+	SceUID textureID = 0;
+	SceUID alphaTextureID = 0;
+	SceUID allWhiteTextureID = 0;
+	void* textureData;
+	void* alphaTextureData;
+	void* allWhiteTextureData;
+	int initResult = 0;
+
+	sceClibPrintf("Allocating memory for the texture data...\n");
+
+	textureData = gpuAllocMap(EMP_Logo_Small_width * EMP_Logo_Small_height * EMP_Logo_Small_comp,
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&textureID);
+	memcpy(textureData, EMP_Logo_Small_data, sizeof(EMP_Logo_Small_data));
+
+	alphaTextureData = gpuAllocMap(EMP_Logo_Small_Alpha_width * EMP_Logo_Small_Alpha_height * EMP_Logo_Small_Alpha_comp,
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&alphaTextureID);
+	memcpy(alphaTextureData, EMP_Logo_Small_Alpha_data, sizeof(EMP_Logo_Small_Alpha_data));
+
+	allWhiteTextureData = gpuAllocMap(allWhite_width * allWhite_height * allWhite_comp,
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&allWhiteTextureID);
+	memcpy(allWhiteTextureData, allWhite_data, sizeof(allWhite_data));
+
+	sceClibPrintf("Initializing texture...\n");
+	initResult = sceGxmTextureInitLinear(&texture, textureData, SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR, EMP_Logo_Small_width, EMP_Logo_Small_height, 0);
+	//initResult = sceGxmTextureInitLinear(&texture, textureData, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR, TEX_WIDTH, TEX_HEIGHT, 1);
+	if (initResult != 0)
+	{
+		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
+	}
+
+	sceClibPrintf("Initializing alpha texture...\n");
+	initResult = sceGxmTextureInitLinear(&alphaTexture, alphaTextureData, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR, EMP_Logo_Small_Alpha_width, EMP_Logo_Small_Alpha_height, 0);
+	if (initResult != 0)
+	{
+		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
+	}
+
+	sceClibPrintf("Initializing all white texture...\n");
+	initResult = sceGxmTextureInitLinear(&allWhiteTexture, allWhiteTextureData, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR, allWhite_width, allWhite_height, 0);
+	if (initResult != 0)
+	{
+		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
+	}
+
+	// Set some texture parameters
+	sceGxmTextureSetMinFilter(&texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMagFilter(&texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMipFilter(&texture, SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
+	sceGxmTextureSetUAddrMode(&texture, SCE_GXM_TEXTURE_ADDR_REPEAT);
+	sceGxmTextureSetVAddrMode(&texture, SCE_GXM_TEXTURE_ADDR_REPEAT);
+
 	//set model position and rotation
-	Vector3f cubePosition = { 0.0f, 0.0f, -2.0f };
-	Vector3f cubeRotation = { 0.0f, 0.0f, 0.0f };
+	Vector3f colorCubePosition = { -0.8f, 0.0f, -2.5f };
+	Vector3f colorCubeRotation = { 0.0f, 0.0f, 0.0f };
+	Vector3f texturedCubePosition = { 0.8f, 0.0f, -2.5f };
+	Vector3f texturedCubeRotation = { 0.0f, 0.0f, 0.0f };
+	Vector3f alphaCubePosition = { 0.0f, 0.0f, -1.0f };
+	Vector3f alphaCubeRotation = { 0.0f, 0.0f, 0.0f };
 	//create model matrix
-	Matrix4x4 cubeModelMatrix = createTransformationMatrix(cubePosition, cubeRotation, Vector3f{ 1.0f, 1.0f, 1.0f });
+	Matrix4x4 colorCubeModelMatrix = createTransformationMatrix(colorCubePosition, colorCubeRotation, Vector3f{ 1.0f, 1.0f, 1.0f });
+	Matrix4x4 texturedCubeModelMatrix = createTransformationMatrix(texturedCubePosition, texturedCubeRotation, Vector3f{ 1.0f, 1.0f, 1.0f });
+	Matrix4x4 alphaCubeModelMatrix = createTransformationMatrix(alphaCubePosition, alphaCubeRotation, Vector3f{ 1.0f, 1.0f, 1.0f });
+	Matrix4x4 surfaceTransformationMatrix = createTransformationMatrix(Vector3f{ 0.0f, 0.0f, 0.0f }, Vector3f{ 0.0f, 0.0f, 0.0f }, Vector3f{ 1.0f, 1.0f, 1.0f });
 
 	//create view matrix
 	Vector3f cameraPosition = { 0.0f, 0.0f, 0.0f };
 	Vector3f cameraRotation = { 0.0f, 0.0f, 0.0f };
 	//params: position, rotation, fov, aspect ratio, near plane, far plane
-	Camera camera = Camera(cameraPosition, cameraRotation, 45.0f, (float)DISPLAY_WIDTH / (float)DISPLAY_HEIGHT, 0.1f, 100.0f);
+	Camera camera = Camera(CameraType::PERSPECTIVE, cameraPosition, cameraRotation, 45.0f, (float)DISPLAY_WIDTH / (float)DISPLAY_HEIGHT, 0.1f, 100.0f);
+	Camera orthoCam(CameraType::ORTHOGRAPHIC, Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 0.0f, 0.0f), 0.0f, 1.0f, -1.0f, 1.0f);
 
+	//surface alpha
+	float alpha = 0.0f;
+	float alphaTimer = 0.0f;
+	bool increasing = true;
+
+	//Create a simple struct to hold lots of cube data
+	struct LitCube
+	{
+		Vector3f position;
+		Vector3f rotation;
+		Vector3f scale;
+		Matrix4x4 modelMatrix;
+	};
+
+	std::random_device rd;
+	std::mt19937_64 gen(rd());
+	std::uniform_real_distribution<> disPos(-100.0f, 50.0f);
+	std::uniform_real_distribution<> disRot(0.0f, 360.0f);
+	std::uniform_real_distribution<> disBinary(0.0f, 1.0f); //for binary decisions
+
+
+	std::vector<LitCube> _litCubes;
+	_litCubes.reserve(250);
+	for (int i = 0; i < 250; i++)
+	{
+		LitCube newCube;
+
+		float x, y, z, xyPlaneDistance;
+		//gen random points but keep them within bounds and adjust for spherical distribution
+		do
+		{
+			x = (float)disPos(gen);
+			y = (float)disPos(gen);
+			z = 0.0f; //placeholder
+
+			xyPlaneDistance = 21.0f; //init to value higher than 20 to ensure the loop runs
+
+			//this would keep the points above the "ground" if one was drawn at 0
+			//if (y < 0.0f)
+				//continue;
+
+			xyPlaneDistance = sqrtf(x * x + y * y);
+			if (xyPlaneDistance > 20.0f)
+				continue; //don't place them outside the sphere
+
+			float zSquared = 20 * 20 - xyPlaneDistance * xyPlaneDistance;
+			if (zSquared < 0.0f)
+				continue; //continue if no valid z is found
+
+			z = sqrtf(zSquared); //get the positive z value
+			z *= (disBinary(gen) < 0.5f) ? -1.0f : 1.0f; //randomly make it negative
+
+			if (z > -8.0f)
+				z = -8.0f; //keep the cubes in front of the camera by a ways
+		} while (xyPlaneDistance > 20.0f);
+
+		newCube.position = Vector3f(x, y, z);
+		newCube.rotation = Vector3f(disRot(gen), disRot(gen), disRot(gen));
+		newCube.scale = Vector3f(1.0f, 1.0f, 1.0f);
+		newCube.modelMatrix = createTransformationMatrix(newCube.position, newCube.rotation, newCube.scale);
+
+		_litCubes.push_back(newCube);
+	}
+
+	//create a few lights
+	Light firstLight = Light(Vector3f(0.0f, 2.0f, -7.0f), Color(1.0f, 0.0f, 0.0f, 1.0f));
+	Light secondLight = Light(Vector3f(-4.0f, 2.0f, -7.0f), Color(0.0f, 1.0f, 0.0f, 1.0f));
+	Light thirdLight = Light(Vector3f(4.0f, 2.0f, -7.0f), Color(0.0f, 0.0f, 1.0f, 1.0f));
+	Light lights[3] = { firstLight, secondLight, thirdLight };
+	
+	//for moving the lights
+	float lightOneAngle = 0.0f;
+	float lightTwoAngle = 0.0f;
+	float lightThreeAngle = 0.0f;
+	//circle parameters
+	const float lightOneRadius = 6.0f;
+	const float lightTwoRadius = 6.0f;
+	const float lightThreeRadius = 6.0f;
+	const Vector3f lightOneCenter = { 0.0f, 2.0f, -7.0f };
+	const Vector3f lightTwoCenter = { -4.0f, 2.0f, -7.0f };
+	const Vector3f lightThreeCenter = { 4.0f, 2.0f, -7.0f };
+
+	//verify the containers used for the lit cube uniform buffers
+	unsigned int perFrameVertexContainer = sceGxmProgramParameterGetContainerIndex(gxmTexturedLitVertexProgram_u_viewMatrixParam);
+	unsigned int perFrameFragmentContainer = sceGxmProgramParameterGetContainerIndex(gxmTexturedLitFragmentProgram_u_lightCountParam);
+	sceClibPrintf("Per-frame vertex container: %d\n", perFrameVertexContainer);
+	sceClibPrintf("Per-frame fragment container: %d\n", perFrameFragmentContainer);
+	sceClibPrintf("Size of PerFrameVertexUniformBuffer: %u bytes\n", sizeof(PerFrameVertexUniforms));
+	sceClibPrintf("Size of PerFrameFragmentUniformBuffer: %u bytes\n", sizeof(PerFrameFragmentUniforms));
+
+	//Initialize the per-frame uniform buffers to avoid garbage data
+	memset(perFrameVertexUniformBuffer, 0, sizeof(PerFrameVertexUniforms));
+	memset(perFrameFragmentUniformBuffer, 0, sizeof(PerFrameFragmentUniforms));
+
+	sceClibPrintf("Entering main loop...\n");
 	bool running = true;
 	while (running)
 	{
@@ -1073,13 +1732,81 @@ int main()
 			running = false;
 		}
 
+		if (increasing)
+		{
+			if (alphaTimer <= 4.0f)
+			{
+				alphaTimer += 0.01f;
+			}
+			else
+			{
+				alphaTimer = 4.0f;
+				alpha += 0.02f;
+			}
+			if (alpha > 1.0f)
+			{
+				alpha = 1.0f;
+				increasing = false;
+				alphaTimer = 0.0f;
+			}
+		}
+		else
+		{
+			alpha -= 0.02f;
+			if (alpha < 0.0f)
+			{
+				alpha = 0.0f;
+				increasing = true;
+			}
+		}
+
 		//update cube rotation
-		cubeRotation.x += 0.036f; // * deltaTime TODO
-		cubeRotation.y += 0.050f;
-		cubeRotation.z += 0.01f;
+		colorCubeRotation.x += 0.036f; // * deltaTime TODO
+		colorCubeRotation.y += 0.050f;
+		colorCubeRotation.z += 0.01f;
+
+		texturedCubeRotation.x = 1.0f - colorCubeRotation.x;
+		texturedCubeRotation.y = 1.0f - colorCubeRotation.y;
+		texturedCubeRotation.z = 1.0f - colorCubeRotation.z;
+
+		alphaCubeRotation.x = colorCubeRotation.x / 2;
+		alphaCubeRotation.y = colorCubeRotation.y / 2;
+		alphaCubeRotation.z = texturedCubeRotation.z / 2;
 
 		//cubeModelMatrix.rotate(Vector3f(cubeRotation.x, cubeRotation.y, cubeRotation.z));
-		cubeModelMatrix = createTransformationMatrix(cubePosition, cubeRotation, Vector3f{ 1.0f, 1.0f, 1.0f });
+		colorCubeModelMatrix = createTransformationMatrix(colorCubePosition, colorCubeRotation, Vector3f{ 1.0f, 1.0f, 1.0f });
+		texturedCubeModelMatrix = createTransformationMatrix(texturedCubePosition, texturedCubeRotation, Vector3f{ 1.0f, 1.0f, 1.0f });
+		alphaCubeModelMatrix = createTransformationMatrix(alphaCubePosition, alphaCubeRotation, Vector3f{ 0.5f, 0.5f, 0.5f });
+		//create the surface transformation matrix by multiplying the model/view/projection matrices
+		surfaceTransformationMatrix = surfaceTransformationMatrix * orthoCam.getViewMatrix() * orthoCam.getProjectionMatrix();
+
+		//move the lights
+		lightOneAngle += 0.03f;
+		lightTwoAngle += 0.02f;
+		lightThreeAngle += 0.04f;
+
+		//keep angles in range to avoid floating point issues over time
+		if (lightOneAngle > 6.28318530718f)
+			lightOneAngle -= 6.28318530718f;
+		if (lightTwoAngle > 6.28318530718f)
+			lightTwoAngle -= 6.28318530718f;
+		if (lightThreeAngle > 6.28318530718f)
+			lightThreeAngle -= 6.28318530718f;
+
+		lights[0].setPosition(Vector3f(
+			lightOneCenter.x + lightOneRadius * cosf(lightOneAngle),
+			lightOneCenter.y,
+			lightOneCenter.z + lightOneRadius * sinf(lightOneAngle)));
+
+		lights[1].setPosition(Vector3f(
+			lightTwoCenter.x + lightTwoRadius * cosf(lightTwoAngle),
+			lightTwoCenter.y,
+			lightTwoCenter.z + lightTwoRadius * sinf(lightTwoAngle)));
+
+		lights[2].setPosition(Vector3f(
+			lightThreeCenter.x + lightThreeRadius * cosf(lightThreeAngle),
+			lightThreeCenter.y,
+			lightThreeCenter.z + lightThreeRadius * sinf(lightThreeAngle)));
 
 		clearScreen();
 
@@ -1089,18 +1816,159 @@ int main()
 
 		void* basicVertexBufferA;
 		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &basicVertexBufferA);
-		sceGxmSetUniformDataF(basicVertexBufferA, gxmBasicVertexProgram_u_modelMatrixParam, 0, 16, (float*)cubeModelMatrix.getData());
-		
+		sceGxmSetUniformDataF(basicVertexBufferA, gxmBasicVertexProgram_u_modelMatrixParam, 0, 16, (float*)colorCubeModelMatrix.getData());
+
 		void* basicVertexBufferB;
 		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &basicVertexBufferB);
 		sceGxmSetUniformDataF(basicVertexBufferB, gxmBasicVertexProgram_u_viewMatrixParam, 0, 16, (float*)camera.getViewMatrix().getData());
-		
+
 		void* basicVertexBufferC;
 		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &basicVertexBufferC);
 		sceGxmSetUniformDataF(basicVertexBufferC, gxmBasicVertexProgram_u_projectionMatrixParam, 0, 16, (float*)camera.getProjectionMatrix().getData());
 
-		sceGxmSetVertexStream(gxmContext, 0, vertexData);
+		sceGxmSetVertexStream(gxmContext, 0, cVertexData);
 		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, indexData, 36);
+
+		// render lit textured cubes
+		sceGxmSetVertexProgram(gxmContext, gxmTexturedLitVertexProgramPatched);
+		sceGxmSetFragmentProgram(gxmContext, gxmTexturedLitFragmentProgramPatched);
+
+		//populate per-frame uniform data
+		memcpy(perFrameVertexUniformBuffer->viewMatrix, camera.getViewMatrix().getData(), sizeof(float) * 16);
+		memcpy(perFrameVertexUniformBuffer->projectionMatrix, camera.getProjectionMatrix().getData(), sizeof(float) * 16);
+
+
+		perFrameFragmentUniformBuffer->lightCount = 3;
+		for (int i = 0; i < 3; i++)
+		{
+			perFrameFragmentUniformBuffer->lightPositions[i][0] = lights[i].getPosition().x;
+			perFrameFragmentUniformBuffer->lightPositions[i][1] = lights[i].getPosition().y;
+			perFrameFragmentUniformBuffer->lightPositions[i][2] = lights[i].getPosition().z;
+			perFrameFragmentUniformBuffer->lightPositions[i][3] = 1.0f; //padding
+			perFrameFragmentUniformBuffer->lightColors[i][0] = lights[i].getColor().r;
+			perFrameFragmentUniformBuffer->lightColors[i][1] = lights[i].getColor().g;
+			perFrameFragmentUniformBuffer->lightColors[i][2] = lights[i].getColor().b;
+			perFrameFragmentUniformBuffer->lightColors[i][3] = 1.0f; //alpha / padding
+
+			perFrameFragmentUniformBuffer->lightPowers[i] = lights[i].getPower();
+			perFrameFragmentUniformBuffer->lightRadii[i] = lights[i].getRadius();
+		}
+
+		//fill in the rest of the 8 lights with all black and 0 power
+		for (int i = 3; i < 8; i++)
+		{
+			perFrameFragmentUniformBuffer->lightPositions[i][0] = 0.0f;
+			perFrameFragmentUniformBuffer->lightPositions[i][1] = 0.0f;
+			perFrameFragmentUniformBuffer->lightPositions[i][2] = 0.0f;
+			perFrameFragmentUniformBuffer->lightPositions[i][3] = 1.0f;
+			perFrameFragmentUniformBuffer->lightColors[i][0] = 0.0f;
+			perFrameFragmentUniformBuffer->lightColors[i][1] = 0.0f;
+			perFrameFragmentUniformBuffer->lightColors[i][2] = 0.0f;
+			perFrameFragmentUniformBuffer->lightColors[i][3] = 1.0f;
+			perFrameFragmentUniformBuffer->lightPowers[i] = 0.0f;
+			perFrameFragmentUniformBuffer->lightRadii[i] = 0.0f;
+		}
+
+		perFrameFragmentUniformBuffer->cameraPosition[0] = cameraPosition.x;
+		perFrameFragmentUniformBuffer->cameraPosition[1] = cameraPosition.y;
+		perFrameFragmentUniformBuffer->cameraPosition[2] = cameraPosition.z;
+		
+		//bind the per-frame uniform buffer (container 0 from BUFFER[0] in the shader)
+		sceGxmSetVertexUniformBuffer(gxmContext, perFrameVertexContainer, perFrameVertexUniformBuffer);
+		sceGxmSetFragmentUniformBuffer(gxmContext, perFrameFragmentContainer, perFrameFragmentUniformBuffer);
+
+		sceGxmSetFragmentTexture(gxmContext, 0, &allWhiteTexture);
+		sceGxmSetVertexStream(gxmContext, 0, ltVertexData);
+
+		//draw the cubes
+		for (int i = 0; i < _litCubes.size(); i++)
+		{
+			LitCube& cube = _litCubes[i];
+
+			void* litCubeDefaultVUniformBuffer;
+			sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &litCubeDefaultVUniformBuffer);
+
+			sceGxmSetUniformDataF(litCubeDefaultVUniformBuffer, gxmTexturedLitVertexProgram_u_modelMatrixParam, 0, 16, (float*)cube.modelMatrix.getData());
+
+			sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, texturedIndexData, 36);
+		}
+
+		// render textured cube
+		sceGxmSetVertexProgram(gxmContext, gxmTexturedVertexProgramPatched);
+		sceGxmSetFragmentProgram(gxmContext, gxmTexturedFragmentProgramPatched);
+
+		void* texturedVertexBufferA;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &texturedVertexBufferA);
+		sceGxmSetUniformDataF(texturedVertexBufferA, gxmTexturedVertexProgram_u_modelMatrixParam, 0, 16, (float*)texturedCubeModelMatrix.getData());
+
+		void* texturedVertexBufferB;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &texturedVertexBufferB);
+		sceGxmSetUniformDataF(texturedVertexBufferB, gxmTexturedVertexProgram_u_viewMatrixParam, 0, 16, (float*)camera.getViewMatrix().getData());
+
+		void* texturedVertexBufferC;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &texturedVertexBufferC);
+		sceGxmSetUniformDataF(texturedVertexBufferC, gxmTexturedVertexProgram_u_projectionMatrixParam, 0, 16, (float*)camera.getProjectionMatrix().getData());
+
+		sceGxmSetFragmentTexture(gxmContext, 0, &texture);
+		sceGxmSetVertexStream(gxmContext, 0, tVertexData);
+		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, texturedIndexData, 36);
+
+		// render alpha cube
+
+		//Disable backface culling and depth writes
+		sceGxmSetTwoSidedEnable(gxmContext, SCE_GXM_TWO_SIDED_ENABLED);
+		sceGxmSetFrontDepthWriteEnable(gxmContext, SCE_GXM_DEPTH_WRITE_DISABLED);
+		sceGxmSetBackDepthWriteEnable(gxmContext, SCE_GXM_DEPTH_WRITE_DISABLED);
+
+		// First pass, render the back faces of the cube
+		sceGxmSetCullMode(gxmContext, SCE_GXM_CULL_CCW);
+
+		// Reserve new uniforms for the alpha cube draw call:
+		void* alphaVertexBufferA;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &alphaVertexBufferA);
+		sceGxmSetUniformDataF(alphaVertexBufferA, gxmTexturedVertexProgram_u_modelMatrixParam, 0, 16, (float*)alphaCubeModelMatrix.getData());
+
+		void* alphaVertexBufferB;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &alphaVertexBufferB);
+		sceGxmSetUniformDataF(alphaVertexBufferB, gxmTexturedVertexProgram_u_viewMatrixParam, 0, 16, (float*)camera.getViewMatrix().getData());
+
+		void* alphaVertexBufferC;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &alphaVertexBufferC);
+		sceGxmSetUniformDataF(alphaVertexBufferC, gxmTexturedVertexProgram_u_projectionMatrixParam, 0, 16, (float*)camera.getProjectionMatrix().getData());
+
+		// Reuse the same texture and vertex stream
+		sceGxmSetFragmentTexture(gxmContext, 0, &alphaTexture);
+		sceGxmSetVertexStream(gxmContext, 0, tVertexData);
+
+		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, texturedIndexData, 36);
+
+		// Second pass, render the front faces of the cube
+		sceGxmSetCullMode(gxmContext, SCE_GXM_CULL_CW);
+
+		// Reuse the same uniforms and texture
+		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, texturedIndexData, 36);
+
+		// Re-enable backface culling and depth writes
+		sceGxmSetTwoSidedEnable(gxmContext, SCE_GXM_TWO_SIDED_DISABLED);
+		sceGxmSetFrontDepthWriteEnable(gxmContext, SCE_GXM_DEPTH_WRITE_ENABLED);
+		sceGxmSetBackDepthWriteEnable(gxmContext, SCE_GXM_DEPTH_WRITE_ENABLED);
+
+		// render surface
+		sceGxmSetVertexProgram(gxmContext, gxmTexturedScreenLiteralVertexProgramPatched);
+		sceGxmSetFragmentProgram(gxmContext, gxmTexturedScreenLiteralFragmentProgramPatched);
+
+		void* surfaceVertexBufferA;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &surfaceVertexBufferA);
+		sceGxmSetUniformDataF(surfaceVertexBufferA, gxmTexturedScreenLiteralVertexProgram_u_alphaParam, 0, 1, &alpha);
+
+		void* surfaceVertexBufferB;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &surfaceVertexBufferB);
+		sceGxmSetUniformDataF(surfaceVertexBufferB, gxmTexturedScreenLiteralVertexProgram_u_transformParam, 0, 16, (float*)surfaceTransformationMatrix.getData());
+
+		sceGxmSetFragmentTexture(gxmContext, 0, &texture);
+		sceGxmSetVertexStream(gxmContext, 0, sVertexData);
+
+		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, surfaceIndexData, 6);
 
 		swapBuffers();
 	}
@@ -1124,7 +1992,8 @@ int main()
 	gpuFreeUnmap(clearIndicesUID);
 
 	sceClibPrintf("Freeing other model vertex and index data\n");
-	gpuFreeUnmap(vertexDataUID);
+	gpuFreeUnmap(colorCubeVertexDataUID);
+	gpuFreeUnmap(texturedCubeVertexDataUID);
 	gpuFreeUnmap(indexDataUID);
 
 	//unregister programs and destroy shader patcher

@@ -1,0 +1,12 @@
+void main(
+	float2 pass_texCoord : TEXCOORD0,
+	uniform sampler2D u_texture,
+	out float4 out_color : COLOR)
+{
+	// If alpha is less than one, halve the value of the alpha channel
+	out_color = tex2D(u_texture, pass_texCoord);
+	if (out_color.a < 1.0f)
+	{
+		out_color.a *= 0.5f;
+	}
+}

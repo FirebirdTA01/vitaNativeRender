@@ -1,0 +1,15 @@
+float4 main(
+	float3 position,
+	float2 texCoord,
+
+	uniform float u_alpha,
+    uniform float4x4 u_transform,
+
+	out float2 pass_texCoord: TEXCOORD0,
+	out float pass_alpha : COLOR) : POSITION
+{	
+	pass_texCoord = texCoord;
+	pass_alpha = u_alpha;
+
+	return mul(u_transform, float4(position, 1.0));
+}
