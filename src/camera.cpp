@@ -3,11 +3,12 @@
 
 Camera::Camera()
 {
+	this->type = PERSPECTIVE;
 	this->position = Vector3f(0.0f, 0.0f, 0.0f);
 	this->rotation = Vector3f(0.0f, 0.0f, 0.0f);
 	this->fov = 45.0f;
 	this->aspectRatio = 16.0f / 9.0f;
-	this->nearPlane = 0.1f;
+	this->nearPlane = 0.025f;
 	this->farPlane = 100.0f;
 
 	this->viewMatrix = createViewMatrix(position, rotation);
@@ -16,8 +17,9 @@ Camera::Camera()
 	this->updateVectors();
 }
 
-Camera::Camera(Vector3f pos, Vector3f rot, float fieldOfView, float aRatio, float nearP, float farP)
+Camera::Camera(CameraType t, Vector3f pos, Vector3f rot, float fieldOfView, float aRatio, float nearP, float farP)
 {
+	this->type = t;
 	this->position = pos;
 	this->rotation = rot;
 	this->fov = fieldOfView;
@@ -26,7 +28,17 @@ Camera::Camera(Vector3f pos, Vector3f rot, float fieldOfView, float aRatio, floa
 	this->farPlane = farP;
 
 	this->viewMatrix = createViewMatrix(position, rotation);
-	this->projectionMatrix = createProjectionMatrix(fov, aspectRatio, nearPlane, farPlane);
+	if (type == ORTHOGRAPHIC)
+	{
+		float orthoSize = 1.0f; // Half the total height of the area we want to see (larger values zoom out)
+		float left = -aspectRatio * orthoSize;
+		float right = aspectRatio * orthoSize;
+		float top = orthoSize;
+		float bottom = -orthoSize;
+		this->projectionMatrix = createOrthographicProjectionMatrix(left, right, top, bottom, nearPlane, farPlane);
+	}
+	else
+		this->projectionMatrix = createProjectionMatrix(fov, aspectRatio, nearPlane, farPlane);
 
 	this->updateVectors();
 }

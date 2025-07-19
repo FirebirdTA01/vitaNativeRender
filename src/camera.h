@@ -3,11 +3,17 @@
 #include "commonUtils.h"
 #include "matrix.h"
 
+enum CameraType
+{
+	ORTHOGRAPHIC,
+	PERSPECTIVE //default
+};
+
 class Camera
 {
 public:
 	Camera();
-	Camera(Vector3f position, Vector3f rotation, float fov, float aspectRatio, float nearPlane, float farPlane);
+	Camera(CameraType type, Vector3f position, Vector3f rotation, float fov, float aspectRatio, float nearPlane, float farPlane);
 	~Camera();
 
 	Matrix4x4& getViewMatrix();
@@ -22,7 +28,10 @@ public:
 	void varyPosition(Vector3f deltaPosition);
 	void varyRotation(Vector3f deltaRotation);
 
+	void recalculateProjectionMatrix();
+
 private:
+	CameraType type;
 	Vector3f position; // x, y, z
 	Vector3f rotation; // pitch, yaw, roll
 	Vector3f forward;
