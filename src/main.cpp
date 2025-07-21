@@ -1732,6 +1732,57 @@ int main()
 			running = false;
 		}
 
+		double rx = (ctrlData.rx - 128.0) / 128.0;
+		double ry = (ctrlData.ry - 128.0) / 128.0;
+		double lx = (ctrlData.lx - 128.0) / 128.0;
+		double ly = (ctrlData.ly - 128.0) / 128.0;
+		const double deadzone = 0.25;
+		const double sensitivity = 0.05;
+
+		//Update the camera
+		Vector3f cameraMove = { 0.0f, 0.0f, 0.0f };
+		Vector3f cameraRot = { 0.0f, 0.0f, 0.0f };
+
+		if (abs(rx) < deadzone)
+		{
+			rx = 0.0;
+		}
+		else
+		{
+			cameraRot -= Vector3f(0.0f, (float)rx, 0.0f);
+		}
+
+		if (abs(ry) < deadzone)
+		{
+			ry = 0.0;
+		}
+		else
+		{
+			cameraRot -= Vector3f((float)ry, 0.0f, 0.0f);
+		}
+
+		if (abs(lx) < deadzone)
+		{
+			lx = 0.0;
+		}
+		else
+		{
+			cameraMove += camera.getRightVector() * lx;
+		}
+
+		if (abs(ly) < deadzone)
+		{
+			ly = 0.0;
+		}
+		else
+		{
+			cameraMove -= camera.getForwardVector() * ly;
+		}
+
+		camera.varyPosition(cameraMove * sensitivity);
+		camera.varyRotation(cameraRot * sensitivity);
+		
+
 		if (increasing)
 		{
 			if (alphaTimer <= 4.0f)
