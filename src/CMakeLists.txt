@@ -47,7 +47,7 @@ foreach(shader ${SHADER_SRC})
     add_custom_command(
         OUTPUT ${shader_o}
 		COMMAND arm-vita-eabi-objcopy --input-target binary --output-target elf32-littlearm
-            --binary-architecture arm ${SHADER_GXP_FILENAME} ${shader_o}
+            --binary-architecture arm --set-section-alignment .data=4 ${SHADER_GXP_FILENAME} ${shader_o}
 		DEPENDS ${shader_gxp}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/Shaders
 		COMMENT "Objcopying ${shader_gxp} to ${shader_o}"
