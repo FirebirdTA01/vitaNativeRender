@@ -78,6 +78,17 @@ struct TexturedVertex
 	Vector3f normal;
 };
 
+struct PBRVertex
+{
+	PBRVertex() : x(0.0f), y(0.0f), z(0.0f), uv(0.0f, 0.0f), normal(0.0f, 0.0f, 0.0f), tangent(0.0f, 0.0f, 0.0f), bitangent(0.0f, 0.0f, 0.0f) {};
+	PBRVertex(Vector3f inPos, Vector2f inUV, Vector3f inNormal) : tangent(1.0f, 0.0f, 0.0f), bitangent(0.0f, 0.0f, 1.0f) {};
+	float x, y, z;
+	Vector2f uv;
+	Vector3f normal;
+	Vector3f tangent;
+	Vector3f bitangent;
+};
+
 inline Vector3f operator+(const Vector3f& left, const Vector3f& right)
 {
 	return Vector3f(left.x + right.x, left.y + right.y, left.z + right.z);
