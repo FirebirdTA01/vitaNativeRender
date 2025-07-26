@@ -1852,11 +1852,11 @@ int main()
 	sceGxmTextureSetVAddrMode(&terrainRoughness, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
 	//set model position and rotation
-	Vector3f colorCubePosition = { -0.8f, 0.0f, -2.5f };
+	Vector3f colorCubePosition = { -0.8f, 1.0f, -2.5f };
 	Vector3f colorCubeRotation = { 0.0f, 0.0f, 0.0f };
-	Vector3f texturedCubePosition = { 0.8f, 0.0f, -2.5f };
+	Vector3f texturedCubePosition = { 0.8f, 1.0f, -2.5f };
 	Vector3f texturedCubeRotation = { 0.0f, 0.0f, 0.0f };
-	Vector3f alphaCubePosition = { 0.0f, 0.0f, -1.0f };
+	Vector3f alphaCubePosition = { 0.0f, 1.0f, -1.0f };
 	Vector3f alphaCubeRotation = { 0.0f, 0.0f, 0.0f };
 	//create model matrix
 	Matrix4x4 colorCubeModelMatrix = createTransformationMatrix(colorCubePosition, colorCubeRotation, Vector3f{ 1.0f, 1.0f, 1.0f });
@@ -1865,7 +1865,7 @@ int main()
 	Matrix4x4 surfaceTransformationMatrix = createTransformationMatrix(Vector3f{ 0.0f, 0.0f, 0.0f }, Vector3f{ 0.0f, 0.0f, 0.0f }, Vector3f{ 1.0f, 1.0f, 1.0f });
 
 	//create view matrix
-	Vector3f cameraPosition = { 0.0f, 0.0f, 0.0f };
+	Vector3f cameraPosition = { 0.0f, 1.0f, 0.0f };
 	Vector3f cameraRotation = { 0.0f, 0.0f, 0.0f };
 	//params: position, rotation, fov, aspect ratio, near plane, far plane
 	Camera camera = Camera(CameraType::PERSPECTIVE, cameraPosition, cameraRotation, 45.0f, (float)DISPLAY_WIDTH / (float)DISPLAY_HEIGHT, 0.1f, 100.0f);
@@ -1894,6 +1894,7 @@ int main()
 
 	std::vector<LitCube> _litCubes;
 	_litCubes.reserve(250);
+	const float circleSize = 25.0f;
 	for (int i = 0; i < 250; i++)
 	{
 		LitCube newCube;
@@ -1906,17 +1907,17 @@ int main()
 			y = (float)disPos(gen);
 			z = 0.0f; //placeholder
 
-			xyPlaneDistance = 21.0f; //init to value higher than 20 to ensure the loop runs
+			xyPlaneDistance = 26.0f; //init to value higher than 25 to ensure the loop runs
 
-			//this would keep the points above the "ground" if one was drawn at 0
-			//if (y < 0.0f)
+			// Keep the points above the terrain
+			if (y > 0.0f)
 				//continue;
 
 			xyPlaneDistance = sqrtf(x * x + y * y);
-			if (xyPlaneDistance > 20.0f)
+			if (xyPlaneDistance > circleSize)
 				continue; //don't place them outside the sphere
 
-			float zSquared = 20 * 20 - xyPlaneDistance * xyPlaneDistance;
+			float zSquared = circleSize * circleSize - xyPlaneDistance * xyPlaneDistance;
 			if (zSquared < 0.0f)
 				continue; //continue if no valid z is found
 
@@ -1925,7 +1926,7 @@ int main()
 
 			if (z > -8.0f)
 				z = -8.0f; //keep the cubes in front of the camera by a ways
-		} while (xyPlaneDistance > 20.0f);
+		} while (xyPlaneDistance > circleSize);
 
 		newCube.position = Vector3f(x, y, z);
 		newCube.rotation = Vector3f(disRot(gen), disRot(gen), disRot(gen));
