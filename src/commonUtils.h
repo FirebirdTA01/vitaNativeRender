@@ -81,7 +81,8 @@ struct TexturedVertex
 struct PBRVertex
 {
 	PBRVertex() : x(0.0f), y(0.0f), z(0.0f), uv(0.0f, 0.0f), normal(0.0f, 0.0f, 0.0f), tangent(0.0f, 0.0f, 0.0f), bitangent(0.0f, 0.0f, 0.0f) {};
-	PBRVertex(Vector3f inPos, Vector2f inUV, Vector3f inNormal) : tangent(1.0f, 0.0f, 0.0f), bitangent(0.0f, 0.0f, 1.0f) {};
+	// This vertex type is only used for the terrain for now, so tangents/bitangents are set here for a flat grid like model with upward facing normals
+	PBRVertex(Vector3f inPos, Vector2f inUV, Vector3f inNormal) : x(inPos.x), y(inPos.y), z(inPos.z), uv(inUV), normal(inNormal), tangent(1.0f, 0.0f, 0.0f), bitangent(0.0f, 0.0f, 1.0f) {};
 	float x, y, z;
 	Vector2f uv;
 	Vector3f normal;
