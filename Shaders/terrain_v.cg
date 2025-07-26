@@ -1,0 +1,48 @@
+//PBR terrain vertex shader for PSVita
+
+// Per frame uniforms are the same for every entity in the frame
+// These don't change between draw calls, are only set once per frame
+
+struct UniformBufferVertexMatricesPBR
+{
+	row_major float4x4 u_viewMatrix;
+	row_major float4x4 u_projectionMatrix;
+	float3 u_cameraPosition;
+};
+UniformBufferVertexMatricesPBR u_perVFrame : BUFFER[0];
+
+void main(
+	float3 in_position : POSITION,
+	float2 in_texCoord : TEXCOORD0,
+	float3 in_normal : NORMAL,
+	float3 in_tangent : TANGENT,
+	float3 in_bitangent : BINORMAL,
+
+	uniform row_major float4x4 u_modelMatrix,
+
+	out float4 out_position : POSITION,
+	out float2 pass_texCoord : TEXCOORD0,
+	out float2 pass_blendMapTexCoord : TEXCOORD1,
+	out float3 pass_surfaceNormal : TEXCOORD2,
+	out float3 pass_worldPosition : TEXCOORD3,
+	out float3 pass_surfaceToViewVector : TEXCOORD4,
+	out float3 pass_tangent : TEXCOORD5,
+	out float3 pass_bitangent : TEXCOORD6)
+{
+    float4 worldPosition = mul(u_modelMatrix, float4(in_position, 1.0));
+	
+	out_position = mul(u_perVFrame.u_projectionMatrix, mul(u_perVFrame.u_viewMatrix, worldPosition));
+
+	//tile 400x across terrain tiles
+    pass_texCoord = in_texCoord * 400.0;
+	//unitled for blend map
+    pass_blendMapTexCoord = in_texCoord;
+	
+    pass_surfaceNormal = normalize(mul((float3x3) u_modelMatrix, in_normal));
+    pass_tangent = normalize(mul((float3x3) u_modelMatrix, in_tangent));
+    pass_bitangent = normalize(mul((float3x3) u_modelMatrix, in_bitangent));
+	
+	pass_worldPosition = worldPosition.xyz;
+	
+    pass_surfaceToViewVector = u_perVFrame.u_cameraPosition - worldPosition.xyz;
+}

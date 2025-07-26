@@ -1,4 +1,4 @@
-add_executable(${PROJECT_NAME} main.cpp matrix.h matrix.cpp commonUtils.h camera.h camera.cpp EMP_Logo.h EMP_Logo_Alpha.h light.h light.cpp)
+add_executable(${PROJECT_NAME} main.cpp matrix.h matrix.cpp commonUtils.h camera.h camera.cpp EMP_Logo.h EMP_Logo_Alpha.h light.h light.cpp terrain.h terrain.cpp terrainTextures.h)
 add_dependencies(${PROJECT_NAME} Shaders)
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".elf")
 

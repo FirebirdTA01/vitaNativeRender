@@ -15,6 +15,8 @@
 #include "light.h"
 #include "EMP_Logo.h"
 #include "EMP_Logo_Alpha.h"
+#include "terrain.h"
+#include "terrainTextures.h"
 
 #define DISPLAY_WIDTH 960 // Default display width in pixels
 #define DISPLAY_HEIGHT 544 // Default display height in pixels
@@ -136,6 +138,8 @@ extern unsigned char _binary_texturedScreenLiteral_v_gxp_start;
 extern unsigned char _binary_texturedScreenLiteral_f_gxp_start;
 extern unsigned char _binary_texturedLit_v_gxp_start;
 extern unsigned char _binary_texturedLit_f_gxp_start;
+extern unsigned char _binary_terrain_v_gxp_start;
+extern unsigned char _binary_terrain_f_gxp_start;
 
 static const SceGxmProgram* const gxmProgClearVertexGxp = (SceGxmProgram*)&_binary_clear_v_gxp_start;
 static const SceGxmProgram* const gxmProgClearFragmentGxp = (SceGxmProgram*)&_binary_clear_f_gxp_start;
@@ -147,6 +151,8 @@ static const SceGxmProgram* const gxmProgTexturedScreenLiteralVertexGxp = (SceGx
 static const SceGxmProgram* const gxmProgTexturedScreenLiteralFragmentGxp = (SceGxmProgram*)&_binary_texturedScreenLiteral_f_gxp_start;
 static const SceGxmProgram* const gxmProgTexturedLitVertexGxp = (SceGxmProgram*)&_binary_texturedLit_v_gxp_start;
 static const SceGxmProgram* const gxmProgTexturedLitFragmentGxp = (SceGxmProgram*)&_binary_texturedLit_f_gxp_start;
+static const SceGxmProgram* const gxmProgTerrainVertexGxp = (SceGxmProgram*)&_binary_terrain_v_gxp_start;
+static const SceGxmProgram* const gxmProgTerrainFragmentGxp = (SceGxmProgram*)&_binary_terrain_f_gxp_start;
 
 static SceGxmShaderPatcherId gxmClearVertexProgramID;
 static SceGxmShaderPatcherId gxmClearFragmentProgramID;
@@ -204,9 +210,28 @@ static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightPositi
 static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightColorsParam;
 static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightPowersParam;
 static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightRadiiParam;
-
 static SceGxmVertexProgram* gxmTexturedLitVertexProgramPatched;
 static SceGxmFragmentProgram* gxmTexturedLitFragmentProgramPatched;
+
+static SceGxmShaderPatcherId gxmTerrainVertexProgramID;
+static SceGxmShaderPatcherId gxmTerrainFragmentProgramID;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_positionParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_texCoordParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_normalParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_tangentParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_bitangentParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_u_viewMatrixParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_u_projectionMatrixParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_u_cameraPositionParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_u_modelMatrixParam;
+static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_lightCountParam;
+static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_lightPositionsParam;
+static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_lightColorsParam;
+static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_lightPowersParam;
+static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_lightRadiiParam;
+static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_F0Param;
+static SceGxmVertexProgram* gxmTerrainVertexProgramPatched;
+static SceGxmFragmentProgram* gxmTerrainFragmentProgramPatched;
 
 //Used by Lit Textured Shader
 struct PerFrameVertexUniforms
@@ -226,10 +251,34 @@ struct PerFrameFragmentUniforms
 	float cameraPosition[3];		// 12 bytes (vec3)
 };
 
+//Used by Terrain Shader
+struct PerFrameTerrainVertexUniforms
+{
+	float viewMatrix[16];
+	float projectionMatrix[16];
+	float cameraPosition[3];
+};
+static_assert(sizeof(PerFrameTerrainVertexUniforms) == 140, "PerFrameTerrainVertexUniforms buffer size mismatch");
+
+struct PerFrameTerrainFragmentUniforms
+{
+	uint32_t lightCount;			// 4 bytes
+	uint8_t padding[4];				// 4 bytes
+	float lightPositions[8][4];		// 128 bytes (8 vec4s)
+	float lightColors[8][4];		// 128 bytes (8 vec4s)
+	float lightPowers[8];			// 32 bytes (8 floats)
+	float lightRadii[8];			// 32 bytes (8 floats)
+};
+static_assert(sizeof(PerFrameTerrainFragmentUniforms) == 328, "PerFrameTerrainFragmentUniforms buffer size mismatch");
+
 SceUID perFrameVertexUniformBufferUID;
 SceUID perFrameFragmentUniformBufferUID;
+SceUID perFrameTerrainVertexUniformBufferUID;
+SceUID perFrameTerrainFragmentUniformBufferUID;
 PerFrameVertexUniforms* perFrameVertexUniformBuffer;
 PerFrameFragmentUniforms* perFrameFragmentUniformBuffer;
+PerFrameTerrainVertexUniforms* perFrameTerrainVertexUniformBuffer;
+PerFrameTerrainFragmentUniforms* perFrameTerrainFragmentUniformBuffer;
 
 Color clearColor(0.0f, 0.1f, 0.15f, 1.0f); // Clear screen color
 
@@ -470,6 +519,18 @@ void initializeUniformBuffers()
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, //SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW
 		SCE_GXM_MEMORY_ATTRIB_READ,
 		&perFrameFragmentUniformBufferUID);
+
+	perFrameTerrainVertexUniformBuffer = (PerFrameTerrainVertexUniforms*)gpuAllocMap(
+		sizeof(PerFrameTerrainVertexUniforms),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, //SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW (test which is faster)
+		SCE_GXM_MEMORY_ATTRIB_READ,
+		&perFrameTerrainVertexUniformBufferUID);
+
+	perFrameTerrainFragmentUniformBuffer = (PerFrameTerrainFragmentUniforms*)gpuAllocMap(
+		sizeof(PerFrameTerrainFragmentUniforms),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, //SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW
+		SCE_GXM_MEMORY_ATTRIB_READ,
+		&perFrameTerrainFragmentUniformBufferUID);
 }
 
 void freeUniformBuffers()
@@ -1211,6 +1272,118 @@ void createShaders()
 		sceClibPrintf("texturedLit FragmentProgram creation failed\n");
 	}
 
+	/*
+	*	Terrain Shader
+	*/
+	
+
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTerrainVertexGxp, &gxmTerrainVertexProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(terrainVertexProgramGxp): 0x%08X\n", err);
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTerrainFragmentGxp, &gxmTerrainFragmentProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(terrainFragmentProgramGxp): 0x%08X\n", err);
+
+	const SceGxmProgram* terrainVertexProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTerrainVertexProgramID);
+	const SceGxmProgram* terrainFragmentProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTerrainFragmentProgramID);
+
+	/*
+	static const SceGxmProgramParameter* gxmTerrainVertexProgram_positionParam;
+static const SceGxmProgramParameter* gxmTeerrainVertexProgram_texCoordParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_normalParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_tangentParam;
+static const SceGxmProgramParameter* gxmTerrainVertexProgram_bitangentParam;
+*/
+
+	findGxmShaderAttributeByName(terrainVertexProgram, "in_position", &gxmTerrainVertexProgram_positionParam);
+	findGxmShaderAttributeByName(terrainVertexProgram, "in_texCoord", &gxmTerrainVertexProgram_texCoordParam);
+	findGxmShaderAttributeByName(terrainVertexProgram, "in_normal", &gxmTerrainVertexProgram_normalParam);
+	findGxmShaderAttributeByName(terrainVertexProgram, "in_tangent", &gxmTerrainVertexProgram_tangentParam);
+	findGxmShaderAttributeByName(terrainVertexProgram, "in_bitangent", &gxmTerrainVertexProgram_bitangentParam);
+	findGxmShaderUniformByName(terrainVertexProgram, "u_modelMatrix", &gxmTerrainVertexProgram_u_modelMatrixParam);
+	findGxmShaderUniformByName(terrainVertexProgram, "u_perVFrame.u_viewMatrix", &gxmTerrainVertexProgram_u_viewMatrixParam);
+	findGxmShaderUniformByName(terrainVertexProgram, "u_perVFrame.u_projectionMatrix", &gxmTerrainVertexProgram_u_projectionMatrixParam);
+	findGxmShaderUniformByName(terrainFragmentProgram, "u_perPFrame.u_lightCount", &gxmTerrainFragmentProgram_u_lightCountParam);
+	findGxmShaderUniformByName(terrainFragmentProgram, "u_perPFrame.u_lightColors", &gxmTerrainFragmentProgram_u_lightColorsParam);
+	findGxmShaderUniformByName(terrainFragmentProgram, "u_perPFrame.u_lightPowers", &gxmTerrainFragmentProgram_u_lightPowersParam);
+	findGxmShaderUniformByName(terrainFragmentProgram, "u_perPFrame.u_lightRadii", &gxmTerrainFragmentProgram_u_lightRadiiParam);
+	findGxmShaderUniformByName(terrainFragmentProgram, "u_perPFrame.u_lightPositions", &gxmTerrainFragmentProgram_u_lightPositionsParam);
+	findGxmShaderUniformByName(terrainFragmentProgram, "u_F0", &gxmTerrainFragmentProgram_u_F0Param);
+
+	sceClibPrintf("terrain PositionParam at address: %p\n", (void*)gxmTerrainVertexProgram_positionParam);
+	sceClibPrintf("terrain TexCoordParam at address: %p\n", (void*)gxmTerrainVertexProgram_texCoordParam);
+	sceClibPrintf("terrain NormalParam at address: %p\n", (void*)gxmTerrainVertexProgram_normalParam);
+	sceClibPrintf("terrain ModelMatrixParam at address: %p\n", (void*)gxmTerrainVertexProgram_u_modelMatrixParam);
+	sceClibPrintf("terrain ViewMatrixParam at address: %p\n", (void*)gxmTerrainVertexProgram_u_viewMatrixParam);
+	sceClibPrintf("terrain ProjectionMatrixParam at address: %p\n", (void*)gxmTerrainVertexProgram_u_projectionMatrixParam);
+	sceClibPrintf("terrain LightCountParam at address: %p\n", (void*)gxmTerrainFragmentProgram_u_lightCountParam);
+	sceClibPrintf("terrain LightPositionsParam at address: %p\n", (void*)gxmTerrainFragmentProgram_u_lightPositionsParam);
+	sceClibPrintf("terrain LightColorsParam at address: %p\n", (void*)gxmTerrainFragmentProgram_u_lightColorsParam);
+	sceClibPrintf("terrain LightPowersParam at address: %p\n", (void*)gxmTerrainFragmentProgram_u_lightPowersParam);
+	sceClibPrintf("terrain LightRadiiParam at address: %p\n", (void*)gxmTerrainFragmentProgram_u_lightRadiiParam);
+	sceClibPrintf("terrain F0 at address: %p\n", (void*)gxmTerrainFragmentProgram_u_F0Param);
+
+	SceGxmVertexAttribute terrain_vertex_attributes[5];
+	SceGxmVertexStream terrain_vertex_stream;
+	terrain_vertex_attributes[0].streamIndex = 0;
+	terrain_vertex_attributes[0].offset = 0;
+	terrain_vertex_attributes[0].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	terrain_vertex_attributes[0].componentCount = 3;
+	terrain_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTerrainVertexProgram_positionParam);
+	terrain_vertex_attributes[1].streamIndex = 0;
+	terrain_vertex_attributes[1].offset = offsetof(PBRVertex, uv); //sizeof(vector3f);
+	terrain_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	terrain_vertex_attributes[1].componentCount = 2;
+	terrain_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTerrainVertexProgram_texCoordParam);
+	terrain_vertex_attributes[2].streamIndex = 0;
+	terrain_vertex_attributes[2].offset = offsetof(PBRVertex, normal); //sizeof(vector3f) + sizeof(vector2f);
+	terrain_vertex_attributes[2].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	terrain_vertex_attributes[2].componentCount = 3;
+	terrain_vertex_attributes[2].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTerrainVertexProgram_normalParam);
+	terrain_vertex_attributes[3].streamIndex = 0;
+	terrain_vertex_attributes[3].offset = offsetof(PBRVertex, tangent);
+	terrain_vertex_attributes[3].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	terrain_vertex_attributes[3].componentCount = 3;
+	terrain_vertex_attributes[3].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTerrainVertexProgram_tangentParam);
+	terrain_vertex_attributes[4].streamIndex = 0;
+	terrain_vertex_attributes[4].offset = offsetof(PBRVertex, bitangent);
+	terrain_vertex_attributes[4].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	terrain_vertex_attributes[4].componentCount = 3;
+	terrain_vertex_attributes[4].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTerrainVertexProgram_bitangentParam);
+
+	terrain_vertex_stream.stride = sizeof(struct PBRVertex);
+	terrain_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_32BIT;
+
+	err = sceGxmShaderPatcherCreateVertexProgram(gxmShaderPatcher,
+		gxmTerrainVertexProgramID, terrain_vertex_attributes,
+		5, &terrain_vertex_stream, 1, &gxmTerrainVertexProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("Terrain VertexProgram created at address: %p\n", (void*)gxmTerrainVertexProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("Terrain VertexProgram creation failed\n");
+	}
+
+	err = sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher,
+		gxmTerrainFragmentProgramID, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+		gxmMultisampleMode, NULL, terrainVertexProgram,
+		&gxmTerrainFragmentProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("Terrain FragmentProgram created at address: %p\n", (void*)gxmTerrainFragmentProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("Terrain FragmentProgram creation failed\n");
+	}
+
 	//Now allocate persistent memory for the per-frame uniforms used by the lit shader
 	initializeUniformBuffers();
 }
@@ -1489,9 +1662,12 @@ int main()
 		3, 1, 2
 	};
 
+	Terrain terrain;
+
 	//allocate memory for the vertex data
 	sceClibPrintf("Allocating memory for the vertex data...\n");
-	SceUID colorCubeVertexDataUID, texturedCubeVertexDataUID, litTexturedCubeVertexDataUID, surfaceVertexDataUID, indexDataUID, texturedIndexDataUID, surfaceIndexDataUID;
+	SceUID colorCubeVertexDataUID, texturedCubeVertexDataUID, litTexturedCubeVertexDataUID, surfaceVertexDataUID, indexDataUID, texturedIndexDataUID, surfaceIndexDataUID,
+		terrainVertexDataUID, terrainIndexDataUID;
 
 	sceClibPrintf("...colored cube vertex data\n");
 	UnlitColorVertex* cVertexData = (UnlitColorVertex*)gpuAllocMap(cubeVertices.size() * sizeof(UnlitColorVertex),
@@ -1513,6 +1689,11 @@ int main()
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
 		&surfaceVertexDataUID);
 
+	sceClibPrintf("...terrain vertex data\n");
+	PBRVertex* terrainVertexData = (PBRVertex*)gpuAllocMap(terrain.getVertexCount() * sizeof(PBRVertex),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&terrainVertexDataUID);
+
 	sceClibPrintf("Allocating memory for the index data\n");
 	unsigned short* indexData = (unsigned short*)gpuAllocMap(cubeIndices.size() * sizeof(unsigned short),
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
@@ -1527,6 +1708,10 @@ int main()
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
 		&surfaceIndexDataUID);
 
+	unsigned int* terrainIndexData = (unsigned int*)gpuAllocMap(terrain.getIndexCount() * sizeof(unsigned int),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&terrainIndexDataUID);
+
 	//interweave the position and colors into Vertex struct
 	for (int i = 0; i < cubeVertices.size(); i++)
 	{
@@ -1539,6 +1724,7 @@ int main()
 	}
 	memcpy(tVertexData, texturedCubeVertices.data(), 24 * sizeof(UnlitTexturedVertex));
 	memcpy(ltVertexData, litTexturedCubeVertices.data(), litTexturedCubeVertices.size() * sizeof(TexturedVertex));
+	memcpy(terrainVertexData, terrain.getVertices()->data(), terrain.getVertexCount() * sizeof(PBRVertex));
 	//copy the index data
 	memcpy(indexData, cubeIndices.data(), cubeIndices.size() * sizeof(unsigned short));
 	memcpy(texturedIndexData, texturedCubeIndices, 36 * sizeof(unsigned short));
@@ -1547,15 +1733,22 @@ int main()
 	//{
 	//	indexData[i] = cubeIndices[i];
 	//}
+	memcpy(terrainIndexData, terrain.getIndices()->data(), terrain.getIndices()->size() * sizeof(unsigned int));
 
 	// Allocate memory for the texture data and load the texture
-	SceGxmTexture texture, alphaTexture, allWhiteTexture;
+	SceGxmTexture texture, alphaTexture, allWhiteTexture, terrainDiffuse, terrainNormal, terrainRoughness;
 	SceUID textureID = 0;
 	SceUID alphaTextureID = 0;
 	SceUID allWhiteTextureID = 0;
-	void* textureData;
-	void* alphaTextureData;
-	void* allWhiteTextureData;
+	SceUID terrainDiffuseID = 0;
+	SceUID terrainNormalID = 0;
+	SceUID terrainRoughnessID = 0;
+	void* textureData = nullptr;
+	void* alphaTextureData = nullptr;
+	void* allWhiteTextureData = nullptr;
+	void* terrainDiffuseData = nullptr;
+	void* terrainNormalData = nullptr;
+	void* terrainRoughnessData = nullptr;
 	int initResult = 0;
 
 	sceClibPrintf("Allocating memory for the texture data...\n");
@@ -1574,6 +1767,21 @@ int main()
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
 		&allWhiteTextureID);
 	memcpy(allWhiteTextureData, allWhite_data, sizeof(allWhite_data));
+
+	terrainDiffuseData = gpuAllocMap(repeatingGravel_512_diffuse_width * repeatingGravel_512_diffuse_height * repeatingGravel_512_diffuse_comp,
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&terrainDiffuseID);
+	memcpy(terrainDiffuseData, repeatingGravel_512_diffuse_data, sizeof(repeatingGravel_512_diffuse_data));
+
+	terrainNormalData = gpuAllocMap(repeatingGravel_512_normal_width * repeatingGravel_512_normal_height * repeatingGravel_512_normal_comp,
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&terrainNormalID);
+	memcpy(terrainNormalData, repeatingGravel_512_normal_data, sizeof(repeatingGravel_512_normal_data));
+
+	terrainRoughnessData = gpuAllocMap(repeatingGravel_512_roughness_width * repeatingGravel_512_roughness_height * repeatingGravel_512_roughness_comp,
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
+		&terrainRoughnessID);
+	memcpy(terrainRoughnessData, repeatingGravel_512_roughness_data, sizeof(repeatingGravel_512_roughness_data));
 
 	sceClibPrintf("Initializing texture...\n");
 	initResult = sceGxmTextureInitLinear(&texture, textureData, SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR, EMP_Logo_Small_width, EMP_Logo_Small_height, 0);
@@ -1597,12 +1805,51 @@ int main()
 		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
 	}
 
+	sceClibPrintf("Initializing terrain diffuse texture...\n");
+	initResult = sceGxmTextureInitLinear(&terrainDiffuse, terrainDiffuseData, SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR, repeatingGravel_512_diffuse_width, repeatingGravel_512_diffuse_height, 0);
+	if (initResult != 0)
+	{
+		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
+	}
+
+	sceClibPrintf("Initializing terrain normal texture...\n");
+	initResult = sceGxmTextureInitLinear(&terrainNormal, terrainNormalData, SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR, repeatingGravel_512_normal_width, repeatingGravel_512_normal_height, 0);
+	if (initResult != 0)
+	{
+		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
+	}
+
+	sceClibPrintf("Initializing terrain roughness texture...\n");
+	initResult = sceGxmTextureInitLinear(&terrainRoughness, terrainRoughnessData, SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR, repeatingGravel_512_roughness_width, repeatingGravel_512_roughness_height, 0);
+	if (initResult != 0)
+	{
+		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
+	}
+
 	// Set some texture parameters
 	sceGxmTextureSetMinFilter(&texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
 	sceGxmTextureSetMagFilter(&texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
 	sceGxmTextureSetMipFilter(&texture, SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
 	sceGxmTextureSetUAddrMode(&texture, SCE_GXM_TEXTURE_ADDR_REPEAT);
 	sceGxmTextureSetVAddrMode(&texture, SCE_GXM_TEXTURE_ADDR_REPEAT);
+
+	sceGxmTextureSetMinFilter(&terrainDiffuse, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMagFilter(&terrainDiffuse, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMipFilter(&terrainDiffuse, SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
+	sceGxmTextureSetUAddrMode(&terrainDiffuse, SCE_GXM_TEXTURE_ADDR_REPEAT);
+	sceGxmTextureSetVAddrMode(&terrainDiffuse, SCE_GXM_TEXTURE_ADDR_REPEAT);
+
+	sceGxmTextureSetMinFilter(&terrainNormal, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMagFilter(&terrainNormal, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMipFilter(&terrainNormal, SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
+	sceGxmTextureSetUAddrMode(&terrainNormal, SCE_GXM_TEXTURE_ADDR_REPEAT);
+	sceGxmTextureSetVAddrMode(&terrainNormal, SCE_GXM_TEXTURE_ADDR_REPEAT);
+
+	sceGxmTextureSetMinFilter(&terrainRoughness, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMagFilter(&terrainRoughness, SCE_GXM_TEXTURE_FILTER_LINEAR);
+	sceGxmTextureSetMipFilter(&terrainRoughness, SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
+	sceGxmTextureSetUAddrMode(&terrainRoughness, SCE_GXM_TEXTURE_ADDR_REPEAT);
+	sceGxmTextureSetVAddrMode(&terrainRoughness, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
 	//set model position and rotation
 	Vector3f colorCubePosition = { -0.8f, 0.0f, -2.5f };
@@ -1709,14 +1956,22 @@ int main()
 	//verify the containers used for the lit cube uniform buffers
 	unsigned int perFrameVertexContainer = sceGxmProgramParameterGetContainerIndex(gxmTexturedLitVertexProgram_u_viewMatrixParam);
 	unsigned int perFrameFragmentContainer = sceGxmProgramParameterGetContainerIndex(gxmTexturedLitFragmentProgram_u_lightCountParam);
+	unsigned int perFrameTerrainVertexContainer = sceGxmProgramParameterGetContainerIndex(gxmTerrainVertexProgram_u_viewMatrixParam);
+	unsigned int perFrameTerrainFragmentContainer = sceGxmProgramParameterGetContainerIndex(gxmTerrainFragmentProgram_u_lightCountParam);
 	sceClibPrintf("Per-frame vertex container: %d\n", perFrameVertexContainer);
 	sceClibPrintf("Per-frame fragment container: %d\n", perFrameFragmentContainer);
 	sceClibPrintf("Size of PerFrameVertexUniformBuffer: %u bytes\n", sizeof(PerFrameVertexUniforms));
 	sceClibPrintf("Size of PerFrameFragmentUniformBuffer: %u bytes\n", sizeof(PerFrameFragmentUniforms));
+	sceClibPrintf("Per-frame terrain vertex container: %d\n", perFrameTerrainVertexContainer);
+	sceClibPrintf("Per-frame terrain fragment container: %d\n", perFrameTerrainFragmentContainer);
+	sceClibPrintf("Size of PerFrameTerrainVertexUniformBuffer: %u bytes\n", sizeof(PerFrameTerrainVertexUniforms));
+	sceClibPrintf("Size of PerFrameTerrainFragmentUniformBuffer: %u bytes\n", sizeof(PerFrameTerrainFragmentUniforms));
 
 	//Initialize the per-frame uniform buffers to avoid garbage data
 	memset(perFrameVertexUniformBuffer, 0, sizeof(PerFrameVertexUniforms));
 	memset(perFrameFragmentUniformBuffer, 0, sizeof(PerFrameFragmentUniforms));
+	memset(perFrameTerrainVertexUniformBuffer, 0, sizeof(PerFrameTerrainVertexUniforms));
+	memset(perFrameTerrainFragmentUniformBuffer, 0, sizeof(PerFrameTerrainFragmentUniforms));
 
 	sceClibPrintf("Entering main loop...\n");
 	bool running = true;
@@ -1781,6 +2036,7 @@ int main()
 
 		camera.varyPosition(cameraMove * sensitivity);
 		camera.varyRotation(cameraRot * sensitivity);
+		cameraPosition = camera.getPosition();
 		
 
 		if (increasing)
@@ -1862,6 +2118,71 @@ int main()
 		clearScreen();
 
 		//render
+
+		//terrain first
+		sceGxmSetVertexProgram(gxmContext, gxmTerrainVertexProgramPatched);
+		sceGxmSetFragmentProgram(gxmContext, gxmTerrainFragmentProgramPatched);
+
+		void* terrainVertexDefaultBuffer;
+		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &terrainVertexDefaultBuffer);
+		sceGxmSetUniformDataF(terrainVertexDefaultBuffer, gxmTerrainVertexProgram_u_modelMatrixParam, 0, 16, (float*)terrain.getModelMatrix().getData());
+
+		void* terrainFragmentDefaultBuffer;
+		sceGxmReserveFragmentDefaultUniformBuffer(gxmContext, &terrainFragmentDefaultBuffer);
+		//Default F0 for non-metallic materials
+		float F0[3] = { 0.04f, 0.04f, 0.04f };
+		sceGxmSetUniformDataF(terrainFragmentDefaultBuffer, gxmTerrainFragmentProgram_u_F0Param, 0, 3, F0);
+
+		//populate per-frame uniform data
+		memcpy(perFrameTerrainVertexUniformBuffer->viewMatrix, camera.getViewMatrix().getData(), sizeof(float) * 16);
+		memcpy(perFrameTerrainVertexUniformBuffer->projectionMatrix, camera.getProjectionMatrix().getData(), sizeof(float) * 16);
+		perFrameTerrainVertexUniformBuffer->cameraPosition[0] = cameraPosition.x;
+		perFrameTerrainVertexUniformBuffer->cameraPosition[1] = cameraPosition.y;
+		perFrameTerrainVertexUniformBuffer->cameraPosition[2] = cameraPosition.z;
+
+		perFrameTerrainFragmentUniformBuffer->lightCount = 3;
+		for (int i = 0; i < 3; i++)
+		{
+			perFrameTerrainFragmentUniformBuffer->lightPositions[i][0] = lights[i].getPosition().x;
+			perFrameTerrainFragmentUniformBuffer->lightPositions[i][1] = lights[i].getPosition().y;
+			perFrameTerrainFragmentUniformBuffer->lightPositions[i][2] = lights[i].getPosition().z;
+			perFrameTerrainFragmentUniformBuffer->lightPositions[i][3] = 1.0f; //padding
+			perFrameTerrainFragmentUniformBuffer->lightColors[i][0] = lights[i].getColor().r;
+			perFrameTerrainFragmentUniformBuffer->lightColors[i][1] = lights[i].getColor().g;
+			perFrameTerrainFragmentUniformBuffer->lightColors[i][2] = lights[i].getColor().b;
+			perFrameTerrainFragmentUniformBuffer->lightColors[i][3] = 1.0f; //alpha / padding
+
+			perFrameTerrainFragmentUniformBuffer->lightPowers[i] = lights[i].getPower();
+			perFrameTerrainFragmentUniformBuffer->lightRadii[i] = lights[i].getRadius();
+		}
+
+		//fill in the rest of the 8 lights with all black and 0 power
+		for (int i = 3; i < 8; i++)
+		{
+			perFrameTerrainFragmentUniformBuffer->lightPositions[i][0] = 0.0f;
+			perFrameTerrainFragmentUniformBuffer->lightPositions[i][1] = 0.0f;
+			perFrameTerrainFragmentUniformBuffer->lightPositions[i][2] = 0.0f;
+			perFrameTerrainFragmentUniformBuffer->lightPositions[i][3] = 1.0f;
+			perFrameTerrainFragmentUniformBuffer->lightColors[i][0] = 0.0f;
+			perFrameTerrainFragmentUniformBuffer->lightColors[i][1] = 0.0f;
+			perFrameTerrainFragmentUniformBuffer->lightColors[i][2] = 0.0f;
+			perFrameTerrainFragmentUniformBuffer->lightColors[i][3] = 1.0f;
+			perFrameTerrainFragmentUniformBuffer->lightPowers[i] = 0.0f;
+			perFrameTerrainFragmentUniformBuffer->lightRadii[i] = 0.0f;
+		}
+
+		//bind the per-frame uniform buffer
+		sceGxmSetVertexUniformBuffer(gxmContext, perFrameTerrainVertexContainer, perFrameTerrainVertexUniformBuffer);
+		sceGxmSetFragmentUniformBuffer(gxmContext, perFrameTerrainFragmentContainer, perFrameTerrainFragmentUniformBuffer);
+
+		sceGxmSetFragmentTexture(gxmContext, 0, &terrainDiffuse);
+		sceGxmSetFragmentTexture(gxmContext, 1, &terrainNormal);
+		sceGxmSetFragmentTexture(gxmContext, 2, &terrainRoughness);
+		sceGxmSetVertexStream(gxmContext, 0, terrainVertexData);
+
+		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, terrainIndexData, terrain.getIndexCount());
+
+		//then basic cubes
 		sceGxmSetVertexProgram(gxmContext, gxmBasicVertexProgramPatched);
 		sceGxmSetFragmentProgram(gxmContext, gxmBasicFragmentProgramPatched);
 
