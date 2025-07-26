@@ -58,19 +58,24 @@ Matrix4x4& Camera::getViewMatrix()
 	return viewMatrix;
 }
 
-Vector3f Camera::getForwardVector()
+Vector3f Camera::getForwardVector() const
 {
 	return this->forward;
 }
 
-Vector3f Camera::getRightVector()
+Vector3f Camera::getRightVector() const
 {
 	return this->right;
 }
 
-Vector3f Camera::getUpVector()
+Vector3f Camera::getUpVector() const
 {
 	return this->up;
+}
+
+Vector3f Camera::getPosition() const
+{
+	return position;
 }
 
 void Camera::setPosition(Vector3f pos)

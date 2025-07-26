@@ -19,9 +19,10 @@ public:
 	Matrix4x4& getViewMatrix();
 	Matrix4x4& getProjectionMatrix();
 
-	Vector3f getForwardVector();
-	Vector3f getRightVector();
-	Vector3f getUpVector();
+	Vector3f getForwardVector() const;
+	Vector3f getRightVector() const;
+	Vector3f getUpVector() const;
+	Vector3f getPosition() const;
 
 	void setPosition(Vector3f position);
 	void setRotation(Vector3f rotation);
