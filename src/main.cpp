@@ -1990,7 +1990,7 @@ int main()
 		uint64_t deltaTicks = currentTick.tick - prevTick.tick;
 		prevTick = currentTick;
 
-		float deltaTime = (float(deltaTicks) / float(tickRes)) * float(tickRes / 10000);
+		float deltaTime = (float)(deltaTicks * 1000 / tickRes);
 
 		sceCtrlPeekBufferPositive(0, &ctrlData, 1);
 		if (ctrlData.buttons & SCE_CTRL_START)
@@ -2007,7 +2007,7 @@ int main()
 		double lx = (ctrlData.lx - 128.0) / 128.0;
 		double ly = (ctrlData.ly - 128.0) / 128.0;
 		const double deadzone = 0.25;
-		const double sensitivity = 0.05;
+		const double sensitivity = 0.005;
 
 		//Update the camera
 		Vector3f cameraMove = { 0.0f, 0.0f, 0.0f };
@@ -2049,8 +2049,8 @@ int main()
 			cameraMove -= camera.getForwardVector() * ly;
 		}
 
-		camera.varyPosition(cameraMove * sensitivity);
-		camera.varyRotation(cameraRot * sensitivity);
+		camera.varyPosition(cameraMove * sensitivity * deltaTime);
+		camera.varyRotation(cameraRot * sensitivity * deltaTime);
 		cameraPosition = camera.getPosition();
 		
 
@@ -2058,12 +2058,12 @@ int main()
 		{
 			if (alphaTimer <= 4.0f)
 			{
-				alphaTimer += 0.01f * deltaTime;
+				alphaTimer += 0.001f * deltaTime;
 			}
 			else
 			{
 				alphaTimer = 4.0f;
-				alpha += 0.02f * deltaTime;
+				alpha += 0.002f * deltaTime;
 			}
 			if (alpha > 1.0f)
 			{
@@ -2074,7 +2074,7 @@ int main()
 		}
 		else
 		{
-			alpha -= 0.02f;
+			alpha -= 0.02f * deltaTime;
 			if (alpha < 0.0f)
 			{
 				alpha = 0.0f;
@@ -2083,9 +2083,9 @@ int main()
 		}
 
 		//update cube rotation
-		colorCubeRotation.x += 0.036f * deltaTime;
-		colorCubeRotation.y += 0.050f * deltaTime;
-		colorCubeRotation.z += 0.01f * deltaTime;
+		colorCubeRotation.x += 0.0036f * deltaTime;
+		colorCubeRotation.y += 0.0050f * deltaTime;
+		colorCubeRotation.z += 0.001f * deltaTime;
 
 		texturedCubeRotation.x = 1.0f - colorCubeRotation.x;
 		texturedCubeRotation.y = 1.0f - colorCubeRotation.y;
@@ -2103,9 +2103,9 @@ int main()
 		surfaceTransformationMatrix = surfaceTransformationMatrix * orthoCam.getViewMatrix() * orthoCam.getProjectionMatrix();
 
 		//move the lights
-		lightOneAngle += 0.03f * deltaTime;
-		lightTwoAngle += 0.02f * deltaTime;
-		lightThreeAngle += 0.04f * deltaTime;
+		lightOneAngle += 0.003f * deltaTime;
+		lightTwoAngle += 0.002f * deltaTime;
+		lightThreeAngle += 0.004f * deltaTime;
 
 		//keep angles in range to avoid floating point issues over time
 		if (lightOneAngle > 6.28318530718f)
