@@ -4,6 +4,7 @@
 #include <psp2/kernel/sysmem.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/ctrl.h>
+#include <psp2/rtc.h>
 #include <vector>
 #include <stdlib.h> // For malloc, free
 #include <string.h> // For memcpy
@@ -1485,6 +1486,11 @@ int main()
 	SceCtrlData ctrlData;
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
 
+	//For delta time
+	SceRtcTick prevTick;
+	sceRtcGetCurrentTick(&prevTick);
+	unsigned int tickRes = sceRtcGetTickResolution(); //ticks per second
+
 	sceGxmSetTwoSidedEnable(gxmContext, SCE_GXM_TWO_SIDED_DISABLED);
 	/*// Scissor Test shader register
 	sceGxmShaderPatcherCreateMaskUpdateFragmentProgram(gxm_shader_patcher, &scissor_test_fragment_program);
@@ -1978,6 +1984,14 @@ int main()
 	bool running = true;
 	while (running)
 	{
+		SceRtcTick currentTick;
+		sceRtcGetCurrentTick(&currentTick);
+
+		uint64_t deltaTicks = currentTick.tick - prevTick.tick;
+		prevTick = currentTick;
+
+		float deltaTime = (float(deltaTicks) / float(tickRes)) * float(tickRes / 10000);
+
 		sceCtrlPeekBufferPositive(0, &ctrlData, 1);
 		if (ctrlData.buttons & SCE_CTRL_START)
 		{
@@ -2044,12 +2058,12 @@ int main()
 		{
 			if (alphaTimer <= 4.0f)
 			{
-				alphaTimer += 0.01f;
+				alphaTimer += 0.01f * deltaTime;
 			}
 			else
 			{
 				alphaTimer = 4.0f;
-				alpha += 0.02f;
+				alpha += 0.02f * deltaTime;
 			}
 			if (alpha > 1.0f)
 			{
@@ -2069,9 +2083,9 @@ int main()
 		}
 
 		//update cube rotation
-		colorCubeRotation.x += 0.036f; // * deltaTime TODO
-		colorCubeRotation.y += 0.050f;
-		colorCubeRotation.z += 0.01f;
+		colorCubeRotation.x += 0.036f * deltaTime;
+		colorCubeRotation.y += 0.050f * deltaTime;
+		colorCubeRotation.z += 0.01f * deltaTime;
 
 		texturedCubeRotation.x = 1.0f - colorCubeRotation.x;
 		texturedCubeRotation.y = 1.0f - colorCubeRotation.y;
@@ -2089,9 +2103,9 @@ int main()
 		surfaceTransformationMatrix = surfaceTransformationMatrix * orthoCam.getViewMatrix() * orthoCam.getProjectionMatrix();
 
 		//move the lights
-		lightOneAngle += 0.03f;
-		lightTwoAngle += 0.02f;
-		lightThreeAngle += 0.04f;
+		lightOneAngle += 0.03f * deltaTime;
+		lightTwoAngle += 0.02f * deltaTime;
+		lightThreeAngle += 0.04f * deltaTime;
 
 		//keep angles in range to avoid floating point issues over time
 		if (lightOneAngle > 6.28318530718f)

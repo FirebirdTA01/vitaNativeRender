@@ -61,7 +61,7 @@ add_custom_target(Shaders DEPENDS ${SHADER_OBJS})
 
 # Link the executable to the library
 message(STATUS "Shader Objects: ${SHADER_OBJS}")
-target_link_libraries(${PROJECT_NAME} PRIVATE -Wl,-q -lm ${SHADER_OBJS} SceDisplay_stub SceGxm_stub SceCtrl_stub)
+target_link_libraries(${PROJECT_NAME} PRIVATE -Wl,-q -lm ${SHADER_OBJS} SceDisplay_stub SceGxm_stub SceCtrl_stub SceRtc_stub)
 
 add_custom_command(OUTPUT EBOOT.BIN
 	COMMAND vita-elf-create $<TARGET_FILE:${PROJECT_NAME}> ${PROJECT_NAME}.velf
