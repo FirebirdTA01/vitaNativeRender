@@ -23,11 +23,11 @@ void main(
 	out float4 out_position : POSITION,
 	out float2 pass_texCoord : TEXCOORD0,
 	out float2 pass_blendMapTexCoord : TEXCOORD1,
-	out float3 pass_surfaceNormal : TEXCOORD2,
-	out float3 pass_worldPosition : TEXCOORD3,
-	out float3 pass_surfaceToViewVector : TEXCOORD4,
-	out float3 pass_tangent : TEXCOORD5,
-	out float3 pass_bitangent : TEXCOORD6)
+	out float4 pass_surfaceNormal : TEXCOORD2,
+	out float4 pass_worldPosition : TEXCOORD3,
+	out float4 pass_surfaceToViewVector : TEXCOORD4,
+	out float4 pass_tangent : TEXCOORD5,
+	out float4 pass_bitangent : TEXCOORD6)
 {
     float4 worldPosition = mul(u_modelMatrix, float4(in_position, 1.0));
 	
@@ -38,11 +38,11 @@ void main(
 	//unitled for blend map
     pass_blendMapTexCoord = in_texCoord;
 	
-    pass_surfaceNormal = normalize(mul((float3x3) u_modelMatrix, in_normal));
-    pass_tangent = normalize(mul((float3x3) u_modelMatrix, in_tangent));
-    pass_bitangent = normalize(mul((float3x3) u_modelMatrix, in_bitangent));
+    pass_surfaceNormal = float4(normalize(mul((float3x3) u_modelMatrix, in_normal)), 1.0);
+    pass_tangent = float4(normalize(mul((float3x3) u_modelMatrix, in_tangent)), 1.0);
+    pass_bitangent = float4(normalize(mul((float3x3) u_modelMatrix, in_bitangent)), 1.0);
 	
-	pass_worldPosition = worldPosition.xyz;
+	pass_worldPosition = worldPosition;
 	
-    pass_surfaceToViewVector = u_perVFrame.u_cameraPosition - worldPosition.xyz;
+    pass_surfaceToViewVector = float4(u_perVFrame.u_cameraPosition - worldPosition.xyz, 1.0);
 }

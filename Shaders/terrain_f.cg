@@ -54,11 +54,11 @@ float3 fresnelSchlick(float3 F0, float3 hVec, float3 vVec)
 void main(
     float2 pass_texCoord : TEXCOORD0,
     float2 pass_blendMapTexCoord : TEXCOORD1, // Not used in simplified version
-    float3 pass_surfaceNormal : TEXCOORD2,
-    float3 pass_worldPosition : TEXCOORD3,
-    float3 pass_surfaceToViewVector : TEXCOORD4,
-    float3 pass_tangent : TEXCOORD5,
-    float3 pass_bitangent : TEXCOORD6,
+    float4 pass_surfaceNormal : TEXCOORD2,
+    float4 pass_worldPosition : TEXCOORD3,
+    float4 pass_surfaceToViewVector : TEXCOORD4,
+    float4 pass_tangent : TEXCOORD5,
+    float4 pass_bitangent : TEXCOORD6,
 
     // Simple texture uniforms - no flags needed
     uniform sampler2D u_diffuseMap : TEXUNIT0,
@@ -83,9 +83,9 @@ void main(
     float ao = 1.0; // No AO map, assume full lighting
     
     // Normalize the input vectors
-    float3 N = normalize(pass_surfaceNormal);
-    float3 T = normalize(pass_tangent);
-    float3 B = normalize(pass_bitangent);
+    float3 N = normalize(pass_surfaceNormal.xyz);
+    float3 T = normalize(pass_tangent.xyz);
+    float3 B = normalize(pass_bitangent.xyz);
     
     // Adjust for handedness
     if (dot(cross(N, T), B) < 0.0)
@@ -107,9 +107,9 @@ void main(
     for (unsigned int i = 0; i < lightCount; i++)
     {
         // Compute the vector from the surface to the light
-        float3 surfaceToLight = u_perPFrame.u_lightPositions[i] - pass_worldPosition;
+        float3 surfaceToLight = u_perPFrame.u_lightPositions[i] - pass_worldPosition.xyz;
         float3 L = normalize(surfaceToLight);
-        float3 V = normalize(pass_surfaceToViewVector);
+        float3 V = normalize(pass_surfaceToViewVector.xyz);
         float3 H = normalize(L + V);
 
         float dist = length(surfaceToLight);

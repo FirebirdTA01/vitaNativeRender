@@ -17,28 +17,28 @@ PerFrameFragmentUniforms u_perPFrame : BUFFER[0];
 
 void main(
 	float2 pass_texCoord : TEXCOORD0,
-	float3 pass_surfaceNormal : TEXCOORD1,
-	float3 pass_worldPosition : TEXCOORD2,
+	float4 pass_surfaceNormal : TEXCOORD1,
+	float4 pass_worldPosition : TEXCOORD2,
 
 	uniform sampler2D u_texture, // per group, set via texture binding
 
 	out float4 out_color : COLOR)
 {
-	float3 surfaceNormal = normalize(pass_surfaceNormal);
+	float3 surfaceNormal = normalize(pass_surfaceNormal.xyz);
 	
 	//init ambient light and total light
 	float3 ambient = float3(0.05, 0.05, 0.05);
 	float3 totalLight = ambient;
 
 	// Calculate the view direction for specular lighting
-	float3 viewDir = normalize(u_perPFrame.u_cameraPosition - pass_worldPosition);
+	float3 viewDir = normalize(u_perPFrame.u_cameraPosition - pass_worldPosition.xyz);
 
 	float specularPower = max(16.0, 1.0);
 	float pi = 3.14159265;
 	
 	for(unsigned int i = 0; i < u_perPFrame.u_lightCount; i++)
     {
-		float3 surfaceToLight = u_perPFrame.u_lightPositions[i].xyz - pass_worldPosition;
+		float3 surfaceToLight = u_perPFrame.u_lightPositions[i].xyz - pass_worldPosition.xyz;
 		float distSq = dot(surfaceToLight, surfaceToLight); //faster than length2
 		float invRadius = 1.0 / u_perPFrame.u_lightRadii[i];
 		float radiusSq = u_perPFrame.u_lightRadii[i] * u_perPFrame.u_lightRadii[i];
