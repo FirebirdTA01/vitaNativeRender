@@ -37,6 +37,26 @@ struct Vector3f
 	float x, y, z;
 };
 
+struct Vector4f
+{
+	Vector4f()
+	{
+		x = 0.0f;
+		y = 0.0f;
+		z = 0.0f;
+		w = 0.0f;
+	}
+	Vector4f(float inX, float inY, float inZ, float inW)
+	{
+		x = inX;
+		y = inY;
+		z = inZ;
+		w = inW;
+	}
+
+	float x, y, z, w;
+};
+
 struct Color
 {
 	Color() : r(0.0f), g(0.0f), b(0.0f), a(0.0f) {};
@@ -134,6 +154,56 @@ inline Vector3f& operator-=(Vector3f& left, const Vector3f& right)
 	left.x -= right.x;
 	left.y -= right.y;
 	left.z -= right.z;
+
+	return left;
+}
+
+inline Vector4f operator+(const Vector4f& left, const Vector4f& right)
+{
+	return Vector4f(left.x + right.x, left.y + right.y, left.z + right.z, left.w + right.w);
+}
+
+inline Vector4f operator-(const Vector4f& left, const Vector4f& right)
+{
+	return Vector4f(left.x - right.x, left.y - right.y, left.z - right.z, left.w - right.w);
+}
+
+inline Vector4f operator*(const Vector4f& left, const Vector4f& right)
+{
+	return Vector4f(left.x * right.x, left.y * right.y, left.z * right.z, left.w * right.w);
+}
+
+inline Vector4f operator/(const Vector4f& left, const Vector4f& right)
+{
+	return Vector4f(left.x / right.x, left.y / right.y, left.z / right.z, left.w / right.w);
+}
+
+inline Vector4f operator*(const Vector4f& left, float right)
+{
+	return Vector4f(left.x * right, left.y * right, left.z * right, left.w * right);
+}
+
+inline Vector4f operator/(const Vector4f& left, float right)
+{
+	return Vector4f(left.x / right, left.y / right, left.z / right, left.w / right);
+}
+
+inline Vector4f& operator+=(Vector4f& left, const Vector4f& right)
+{
+	left.x += right.x;
+	left.y += right.y;
+	left.z += right.z;
+	left.w += right.w;
+
+	return left;
+}
+
+inline Vector4f& operator-=(Vector4f& left, const Vector4f& right)
+{
+	left.x -= right.x;
+	left.y -= right.y;
+	left.z -= right.z;
+	left.w -= right.w;
 
 	return left;
 }

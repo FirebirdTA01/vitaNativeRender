@@ -116,6 +116,24 @@ inline Matrix4x4 operator*(const Matrix4x4& lhs, const float& rhs)
 	return tempMatrix;
 }
 
+inline Vector4f operator*(const Matrix4x4 lhs, const Vector4f& rhs)
+{
+	// Since matrix is stored in row-major order:
+	// Row 0: matrix[0], matrix[1], matrix[2], matrix[3]
+	// Row 1: matrix[4], matrix[5], matrix[6], matrix[7]
+	// Row 2: matrix[8], matrix[9], matrix[10], matrix[11]
+	// Row 3: matrix[12], matrix[13], matrix[14], matrix[15]
+
+	const float* m = const_cast<Matrix4x4&>(lhs).getData();
+
+	return Vector4f(
+		m[0] * rhs.x + m[1] * rhs.y + m[2] * rhs.z + m[3] * rhs.w,    // Row 0 dot Vector
+		m[4] * rhs.x + m[5] * rhs.y + m[6] * rhs.z + m[7] * rhs.w,    // Row 1 dot Vector
+		m[8] * rhs.x + m[9] * rhs.y + m[10] * rhs.z + m[11] * rhs.w,  // Row 2 dot Vector
+		m[12] * rhs.x + m[13] * rhs.y + m[14] * rhs.z + m[15] * rhs.w  // Row 3 dot Vector
+	);
+}
+
 Matrix4x4 createTransformationMatrix(Vector3f translation, Vector3f rotation, Vector3f scale);
 Matrix4x4 createViewMatrix(Vector3f position, Vector3f rotation);
 Matrix4x4 createProjectionMatrix(float fov, float aspectRatio, float nearPlane, float farPlane);
