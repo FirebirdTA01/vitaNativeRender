@@ -282,6 +282,15 @@ PerFrameFragmentUniforms* perFrameFragmentUniformBuffer;
 PerFrameTerrainVertexUniforms* perFrameTerrainVertexUniformBuffer;
 PerFrameTerrainFragmentUniforms* perFrameTerrainFragmentUniformBuffer;
 
+// Holds terrain chunk GPU data for each LOD
+struct ChunkGPUData
+{
+	SceUID vertexUIDs[TerrainChunk::LOD_COUNT];
+	SceUID indexUIDs[TerrainChunk::LOD_COUNT];
+	PBRVertex* vertexPtrs[TerrainChunk::LOD_COUNT];
+	unsigned int* indexPtrs[TerrainChunk::LOD_COUNT];
+};
+
 Color clearColor(0.0f, 0.1f, 0.15f, 1.0f); // Clear screen color
 
 /*	Data structure to pass through the display queue.  This structure is
@@ -1709,11 +1718,6 @@ int main()
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
 		&surfaceVertexDataUID);
 
-	sceClibPrintf("...terrain vertex data\n");
-	PBRVertex* terrainVertexData = (PBRVertex*)gpuAllocMap(terrain.getVertexCount() * sizeof(PBRVertex),
-		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
-		&terrainVertexDataUID);
-
 	sceClibPrintf("Allocating memory for the index data\n");
 	unsigned short* indexData = (unsigned short*)gpuAllocMap(cubeIndices.size() * sizeof(unsigned short),
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
@@ -1728,10 +1732,6 @@ int main()
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
 		&surfaceIndexDataUID);
 
-	unsigned int* terrainIndexData = (unsigned int*)gpuAllocMap(terrain.getIndexCount() * sizeof(unsigned int),
-		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
-		&terrainIndexDataUID);
-
 	//interweave the position and colors into Vertex struct
 	for (int i = 0; i < cubeVertices.size(); i++)
 	{
@@ -1744,7 +1744,6 @@ int main()
 	}
 	memcpy(tVertexData, texturedCubeVertices.data(), 24 * sizeof(UnlitTexturedVertex));
 	memcpy(ltVertexData, litTexturedCubeVertices.data(), litTexturedCubeVertices.size() * sizeof(TexturedVertex));
-	memcpy(terrainVertexData, terrain.getVertices()->data(), terrain.getVertexCount() * sizeof(PBRVertex));
 	//copy the index data
 	memcpy(indexData, cubeIndices.data(), cubeIndices.size() * sizeof(unsigned short));
 	memcpy(texturedIndexData, texturedCubeIndices, 36 * sizeof(unsigned short));
@@ -1753,7 +1752,45 @@ int main()
 	//{
 	//	indexData[i] = cubeIndices[i];
 	//}
-	memcpy(terrainIndexData, terrain.getIndices()->data(), terrain.getIndices()->size() * sizeof(unsigned int));
+
+	std::vector<ChunkGPUData> chunkGPUData;
+	chunkGPUData.resize(Terrain::CHUNKS_PER_SIDE* Terrain::CHUNKS_PER_SIDE);
+
+	sceClibPrintf("Allocating GPU memory for terrain chunks...\n");
+	int chunkIndex = 0;
+	for (const auto& chunk : terrain.getChunks())
+	{
+		ChunkGPUData& gpuData = chunkGPUData[chunkIndex];
+
+		for (int lod = 0; lod < TerrainChunk::LOD_COUNT; lod++)
+		{
+			TerrainChunk::LODMesh* lodMesh = chunk->getLODMesh(static_cast<TerrainChunk::LODLevel>(lod));
+
+			sceClibPrintf("Chunk %d LOD %d: %d vertices, %d indices\n", chunkIndex, lod, lodMesh->vertexCount, lodMesh->indexCount);
+
+			// Allocate vertex data
+			gpuData.vertexPtrs[lod] = (PBRVertex*)gpuAllocMap(
+				lodMesh->vertexCount * sizeof(PBRVertex),
+				SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+				SCE_GXM_MEMORY_ATTRIB_READ,
+				&gpuData.vertexUIDs[lod]
+			);
+
+			// Allocate index data
+			gpuData.indexPtrs[lod] = (unsigned int*)gpuAllocMap(
+				lodMesh->indexCount * sizeof(unsigned int),
+				SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+				SCE_GXM_MEMORY_ATTRIB_READ,
+				&gpuData.indexUIDs[lod]
+			);
+
+			// Copy data
+			memcpy(gpuData.vertexPtrs[lod], lodMesh->vertices.data(), lodMesh->vertexCount * sizeof(PBRVertex));
+			memcpy(gpuData.indexPtrs[lod], lodMesh->indices.data(), lodMesh->indexCount * sizeof(unsigned int));
+		}
+		
+		chunkIndex++;
+	}
 
 	// Allocate memory for the texture data and load the texture
 	SceGxmTexture texture, alphaTexture, allWhiteTexture, terrainDiffuse, terrainNormal, terrainRoughness;
@@ -2155,6 +2192,16 @@ int main()
 			lightThreeCenter.y,
 			lightThreeCenter.z + lightThreeRadius * sinf(lightThreeAngle)));
 
+		// Update terrain LODs
+		terrain.updateLODs(cameraPosition);
+
+		// Get view-projection matrix for frustum culling (only used on terrain for now)
+		// incorporate the terrain's model transform into the cull test
+		Matrix4x4 viewProjMatrix = camera.getProjectionMatrix() * camera.getViewMatrix() * terrain.getModelMatrix();
+
+		// Get visible terrain chunks
+		std::vector<TerrainChunk*> visibleChunks = terrain.getVisibleChunks(viewProjMatrix);
+
 		clearScreen();
 
 		//render
@@ -2218,9 +2265,34 @@ int main()
 		sceGxmSetFragmentTexture(gxmContext, 0, &terrainDiffuse);
 		sceGxmSetFragmentTexture(gxmContext, 1, &terrainNormal);
 		sceGxmSetFragmentTexture(gxmContext, 2, &terrainRoughness);
-		sceGxmSetVertexStream(gxmContext, 0, terrainVertexData);
 
-		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, terrainIndexData, terrain.getIndexCount());
+		// Render the visible chunks
+		int renderedChunks = 0;
+		for (TerrainChunk* chunk : visibleChunks)
+		{
+			// Find the chunk index (For GPU data lookup)
+			int chunkX = 0, chunkZ = 0;
+
+			int chunkIndex = 0;
+			for (const auto& c : terrain.getChunks())
+			{
+				if (c.get() == chunk) break;
+				chunkIndex++;
+			}
+
+			ChunkGPUData& gpuData = chunkGPUData[chunkIndex];
+			TerrainChunk::LODLevel currentLOD = chunk->getCurrentLOD();
+			TerrainChunk::LODMesh* lodMesh = chunk->getCurrentLODMesh();
+
+			//Bind and render
+			sceGxmSetVertexStream(gxmContext, 0, gpuData.vertexPtrs[currentLOD]);
+			sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, 
+				gpuData.indexPtrs[currentLOD], lodMesh->indexCount);
+
+			renderedChunks++;
+		}
+
+		sceClibPrintf("Rendered %d/%d chunks\n", renderedChunks, Terrain::CHUNKS_PER_SIDE * Terrain::CHUNKS_PER_SIDE);
 
 		//then basic cubes
 		sceGxmSetVertexProgram(gxmContext, gxmBasicVertexProgramPatched);
