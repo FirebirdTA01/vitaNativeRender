@@ -25,6 +25,10 @@ float* Matrix4x4::getData()
 	return matrix;
 }
 
+const float* Matrix4x4::getData() const
+{
+	return matrix;
+}
 
 void Matrix4x4::setToIdentity()
 {

@@ -10,6 +10,7 @@ typedef struct Matrix4x4
 	Matrix4x4(std::array<float, 16> inMatrix);
 
 	float* getData();
+	const float* getData() const;
 
 	//Sets the matrix to the identity matrix. THIS WILL OVERWRITE ANY DATA IN THE MATRIX
 	void setToIdentity();
@@ -124,7 +125,7 @@ inline Vector4f operator*(const Matrix4x4 lhs, const Vector4f& rhs)
 	// Row 2: matrix[8], matrix[9], matrix[10], matrix[11]
 	// Row 3: matrix[12], matrix[13], matrix[14], matrix[15]
 
-	const float* m = const_cast<Matrix4x4&>(lhs).getData();
+	const float* m = lhs.getData();
 
 	return Vector4f(
 		m[0] * rhs.x + m[1] * rhs.y + m[2] * rhs.z + m[3] * rhs.w,    // Row 0 dot Vector
