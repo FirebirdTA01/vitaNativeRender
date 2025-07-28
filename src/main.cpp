@@ -288,7 +288,7 @@ struct ChunkGPUData
 	SceUID vertexUIDs[TerrainChunk::LOD_COUNT];
 	SceUID indexUIDs[TerrainChunk::LOD_COUNT];
 	PBRVertex* vertexPtrs[TerrainChunk::LOD_COUNT];
-	unsigned int* indexPtrs[TerrainChunk::LOD_COUNT];
+	uint16_t* indexPtrs[TerrainChunk::LOD_COUNT];
 };
 
 Color clearColor(0.0f, 0.1f, 0.15f, 1.0f); // Clear screen color
@@ -1777,8 +1777,8 @@ int main()
 			);
 
 			// Allocate index data
-			gpuData.indexPtrs[lod] = (unsigned int*)gpuAllocMap(
-				lodMesh->indexCount * sizeof(unsigned int),
+			gpuData.indexPtrs[lod] = (uint16_t*)gpuAllocMap(
+				lodMesh->indexCount * sizeof(uint16_t),
 				SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
 				SCE_GXM_MEMORY_ATTRIB_READ,
 				&gpuData.indexUIDs[lod]
@@ -1786,7 +1786,7 @@ int main()
 
 			// Copy data
 			memcpy(gpuData.vertexPtrs[lod], lodMesh->vertices.data(), lodMesh->vertexCount * sizeof(PBRVertex));
-			memcpy(gpuData.indexPtrs[lod], lodMesh->indices.data(), lodMesh->indexCount * sizeof(unsigned int));
+			memcpy(gpuData.indexPtrs[lod], lodMesh->indices.data(), lodMesh->indexCount * sizeof(uint16_t));
 		}
 		
 		chunkIndex++;
@@ -2286,7 +2286,7 @@ int main()
 
 			//Bind and render
 			sceGxmSetVertexStream(gxmContext, 0, gpuData.vertexPtrs[currentLOD]);
-			sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, 
+			sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, 
 				gpuData.indexPtrs[currentLOD], lodMesh->indexCount);
 
 			renderedChunks++;

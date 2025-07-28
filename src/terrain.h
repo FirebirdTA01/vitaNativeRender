@@ -1,5 +1,6 @@
 #include "commonUtils.h"
 #include "matrix.h"
+#include <psp2/types.h>
 #include <vector>
 #include <memory>
 
@@ -8,21 +9,23 @@ class TerrainChunk
 public:
 	enum LODLevel
 	{
-		LOD_0 = 0,	// 64x64
-		LOD_1,		// 32x32
-		LOD_2,		// 16x16
-		LOD_3,		// 8x8
-		LOD_4,		// 4x4
+		LOD_0 = 0,	// 32x32
+		LOD_1,		// 16x16
+		LOD_2,		// 8x8
+		LOD_3,		// 4x4
+		LOD_4,		// 2x2
 		LOD_COUNT
 	};
 
 	struct LODMesh
 	{
 		std::vector<PBRVertex> vertices;
-		std::vector<unsigned int> indices;
+		std::vector<uint16_t> indices;
 		size_t vertexCount;
 		size_t indexCount;
 	};
+
+	static constexpr int MaxResidentLOD = 3; // keep LOD_0...LOD_3 resident
 
 	TerrainChunk(int chunkX, int chunkZ, float chunkWorldSize, float terrainHeight = 0.0f);
 	~TerrainChunk();
@@ -46,6 +49,7 @@ public:
 	// Check if chunk is in frustum
 	bool isInFrustum(const Matrix4x4& viewProjMatrix) const;
 
+
 private:
 	void generateLODMesh(int verticesPerSide, LODMesh& lodMesh);
 
@@ -59,10 +63,10 @@ private:
 
 	// Distance thresholds for edge-aware LOD (chunk size - 500 / 8 = 62.5)
 	static constexpr float LOD_DISTANCES[LOD_COUNT] = {
-		0.0f,	// LOD_0: 0 - 31.25 units
-		31.25f,	// LOD_1: 31.25 - 62.5 units
-		62.5f,	// LOD_2: 62.5 - 125
-		125.0f,	// LOD_3: 125 - 250
+		0.0f,	// LOD_0: 0 - 10 units
+		10.0f,	// LOD_1: 10 - 30 units
+		30.0f,	// LOD_2: 30 - 100
+		100.0f,	// LOD_3: 100 - 250
 		250.0f	// LOD_4: 250+
 	};
 };
@@ -70,8 +74,8 @@ private:
 class Terrain
 {
 public:
-	static constexpr int CHUNKS_PER_SIDE = 8; // 8x8 chunks per terrain tile
-	static constexpr int CHUNK_GRID_SIZE = 64; // Each chunk is 64x64 at highest LOD
+	static constexpr int CHUNKS_PER_SIDE = 6; // 6x6 chunks per terrain tile
+	static constexpr int CHUNK_GRID_SIZE = 32; // Each chunk is 64x64 at highest LOD
 	static constexpr int TERRAIN_GRID_SIZE = CHUNKS_PER_SIDE * CHUNK_GRID_SIZE;
 	static constexpr float TERRAIN_SIZE = 500.0f;
 	static constexpr float CHUNK_SIZE = TERRAIN_SIZE / CHUNKS_PER_SIDE;
