@@ -20,16 +20,6 @@ Matrix4x4::Matrix4x4(std::array<float, 16> inMatrix)
 	}
 }
 
-float* Matrix4x4::getData()
-{
-	return matrix;
-}
-
-const float* Matrix4x4::getData() const
-{
-	return matrix;
-}
-
 void Matrix4x4::setToIdentity()
 {
 	std::fill(matrix, matrix + sizeof(matrix) / sizeof(float), 0.0f);
