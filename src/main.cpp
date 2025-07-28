@@ -2074,7 +2074,7 @@ int main()
 		}
 		else
 		{
-			alpha -= 0.02f * deltaTime;
+			alpha -= 0.004f * deltaTime;
 			if (alpha < 0.0f)
 			{
 				alpha = 0.0f;
