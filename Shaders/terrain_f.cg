@@ -1,5 +1,7 @@
 //PBR terrain fragment shader for PSVita
 
+#pragma argument (O4; fastmath; fastprecision; fastint)
+
 struct UniformBufferFragmentLightingSimple
 {
     unsigned int u_lightCount;
@@ -20,20 +22,20 @@ float distributionGGX(float3 N, float3 H, float roughness)
     float NdotH = max(dot(N, H), 0.0);
     float NdotH2 = NdotH * NdotH;
     
-    float PI = 3.14159265359;
-    
     float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = denom * denom * PI;
-
-    return a2 / denom;
+    return a2 / (3.14159256 * denom * denom);
 }
 
 float geometrySchlickGGX(float NdotV, float roughness)
 {
-    float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
-    float denom = NdotV * (1.0 - k) + k;
+    //float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    //float denom = NdotV * (1.0 - k) + k;
 
-    return NdotV / denom;
+    //simplified (r+1)^2/8
+    float k = roughness * roughness * 0.125;
+
+    //return NdotV / (denom);
+    return NdotV / (NdotV * (1.0 - k) + k);
 }
 
 float geometrySmith(float3 N, float3 V, float3 L, float roughness)
@@ -48,7 +50,13 @@ float geometrySmith(float3 N, float3 V, float3 L, float roughness)
 
 float3 fresnelSchlick(float3 F0, float3 hVec, float3 vVec)
 {
-    return F0 + (float3(1.0) - F0) * pow(1.0 - dot(vVec, hVec), 5.0);
+    //return F0 + (float3(1.0) - F0) * pow(1.0 - dot(vVec, hVec), 5.0);
+
+    //Much faster
+    float cosTheta = 1.0 - dot(vVec, hVec);
+    float cosTheta2 = cosTheta * cosTheta;
+    float cosTheta5 = cosTheta * cosTheta * cosTheta;
+    return F0 + (float3(1.0) - F0) * cosTheta5;
 }
 
 void main(
@@ -108,6 +116,11 @@ void main(
     {
         // Compute the vector from the surface to the light
         float3 surfaceToLight = u_perPFrame.u_lightPositions[i] - pass_worldPosition.xyz;
+        float distSq = dot(surfaceToLight, surfaceToLight);
+
+        //early out
+        if(distSq >= u_perPFrame.u_lightRadii[i] * u_perPFrame.u_lightRadii[i]) continue;
+
         float3 L = normalize(surfaceToLight);
         float3 V = normalize(pass_surfaceToViewVector.xyz);
         float3 H = normalize(L + V);
@@ -157,7 +170,9 @@ void main(
     float3 finalColor = totalLight;
 
     // Simple gamma correction
-    finalColor = pow(finalColor, float3(1.0 / 2.2));
+    //finalColor = pow(finalColor, float3(1.0 / 2.2));
+    //much faster
+    finalColor = sqrt(finalColor);
     
     out_color = float4(finalColor, 1.0);
 }

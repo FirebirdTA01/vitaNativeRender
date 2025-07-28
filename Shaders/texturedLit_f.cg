@@ -15,6 +15,9 @@ struct PerFrameFragmentUniforms
 
 PerFrameFragmentUniforms u_perPFrame : BUFFER[0];
 
+static const float PI = 3.14159265;
+static const float INV_PI = 0.31831; // 1/pi
+
 void main(
 	float2 pass_texCoord : TEXCOORD0,
 	float4 pass_surfaceNormal : TEXCOORD1,
@@ -24,47 +27,78 @@ void main(
 
 	out float4 out_color : COLOR)
 {
-	float3 surfaceNormal = normalize(pass_surfaceNormal.xyz);
-	
-	//init ambient light and total light
-	float3 ambient = float3(0.05, 0.05, 0.05);
-	float3 totalLight = ambient;
+	// Start with ambient
+	float3 totalLight = float3(0.05, 0.05, 0.05);
 
+	float3 surfaceNormal = normalize(pass_surfaceNormal.xyz);
 	// Calculate the view direction for specular lighting
 	float3 viewDir = normalize(u_perPFrame.u_cameraPosition - pass_worldPosition.xyz);
-
-	float specularPower = max(16.0, 1.0);
-	float pi = 3.14159265;
 	
 	for(unsigned int i = 0; i < u_perPFrame.u_lightCount; i++)
     {
 		float3 surfaceToLight = u_perPFrame.u_lightPositions[i].xyz - pass_worldPosition.xyz;
 		float distSq = dot(surfaceToLight, surfaceToLight); //faster than length2
-		float invRadius = 1.0 / u_perPFrame.u_lightRadii[i];
+
 		float radiusSq = u_perPFrame.u_lightRadii[i] * u_perPFrame.u_lightRadii[i];
 
 		if(distSq < radiusSq)
 		{
-			float dist = sqrt(distSq); //only one sqrt needed
-			float3 lightDir = surfaceToLight / dist; //normalize
+			// Reciprocal square root (often faster than sqrt + divide)
+			float invDist = rsqrt(distSq);
+			float dist = distSq * invDist;
+			float3 lightDir = surfaceToLight * invDist;
 
 			// Diffuse lighting
-			float dotProduct = max(dot(surfaceNormal, lightDir), 0.0);
+			float NdotL = saturate(dot(surfaceNormal, lightDir));
+
+			// Simplified attenuation
+			float invRadius = 1.0 / u_perPFrame.u_lightRadii[i];
+			float attenuationFactor = u_perPFrame.u_lightPowers[i] * (1.0 - (dist * invRadius));
+			float attenuation = max(attenuationFactor * INV_PI / distSq, 0.0);
+
+			// Simplified Specular (no pow)
+			float3 halfVec = normalize(lightDir + viewDir); // Blinn-Phong
+			//float spec = pow(max(dot(surfaceNormal, halfVec), 0.0), specularPower);
+			//This is cheaper
+			float spec = max(dot(surfaceNormal, halfVec), 0.0);
+			spec = spec * spec; //spec ^2
+			spec = spec * spec; //spec ^4
+			spec = spec * spec; //spec ^8
+			spec = spec * spec; //spec ^16
+			float specularFactor = 0.5 * spec * attenuation;
+
+			float lighting = NdotL * attenuation + 0.5 * spec * attenuation;
+			totalLight += u_perPFrame.u_lightColors[i].xyz * lighting;
+		}
+
+		//if(distSq < radiusSq)
+		//{
+		//	float dist = sqrt(distSq); //only one sqrt needed
+		//	float3 lightDir = surfaceToLight / dist; //normalize
+
+			// Diffuse lighting
+		//	float dotProduct = max(dot(surfaceNormal, lightDir), 0.0);
 
 			// Falloff with distance
-			float attenuationFactor = u_perPFrame.u_lightPowers[i] * (1.0 - (dist * invRadius));
-			float attenuation = max(attenuationFactor / (pi * distSq), 0.0);
+		//	float attenuationFactor = u_perPFrame.u_lightPowers[i] * (1.0 - (dist * invRadius));
+		//	float attenuation = max(attenuationFactor / (PI * distSq), 0.0);
 
 			// Specular lighting
-			float3 halfVec = normalize(lightDir + viewDir); // Blinn-Phong
-			float spec = pow(max(dot(surfaceNormal, halfVec), 0.0), specularPower);
-			float specularFactor = 0.5 * spec * attenuation;
+		//	float3 halfVec = normalize(lightDir + viewDir); // Blinn-Phong
+			//float spec = pow(max(dot(surfaceNormal, halfVec), 0.0), specularPower);
+			//This is cheaper
+		//	float spec = max(dot(surfaceNormal, halfVec), 0.0);
+		//	spec = spec * spec; //spec ^2
+		//	spec = spec * spec; //spec ^4
+		//	spec = spec * spec; //spec ^8
+		//	spec = spec * spec; //spec ^16
+		//	float specularFactor = 0.5 * spec * attenuation;
 
 			//diffuseLight += u_perPFrame.u_lightColors[i].xyz * dotProduct * attenuation;
 			//specularLight += u_perPFrame.u_lightColors[i].xyz * specularFactor;
 
-			totalLight += u_perPFrame.u_lightColors[i].xyz * (dotProduct * attenuation * specularFactor);
-		}
+		//	totalLight += u_perPFrame.u_lightColors[i].xyz * (dotProduct * attenuation * specularFactor);
+		//}
 	}
 
 	//test
