@@ -35,10 +35,15 @@ TerrainChunk::LODLevel TerrainChunk::calculateLOD(const Vector3f& cameraPos) con
 	float dz = center.z - cameraPos.z;
 	float distance = sqrtf(dx * dx + dy * dy + dz * dz);
 
-	// Select LOD based on distance
+	// Distance to chunk edge
+	float distToEdge = distance - boundingRadius;
+	if (distToEdge < 0.0f)
+		distToEdge = 0.0f; // inside the sphere
+
+	// Select LOD based on edge distance
 	for (int i = LOD_COUNT - 1; i >= 0; i--)
 	{
-		if (distance >= LOD_DISTANCES[i])
+		if (distToEdge >= LOD_DISTANCES[i])
 		{
 			return static_cast<LODLevel>(i);
 		}
