@@ -30,6 +30,7 @@
 #define DISPLAY_PIXEL_FORMAT SCE_DISPLAY_PIXELFORMAT_A8B8G8R8
 
 static SceGxmMultisampleMode gxmMultisampleMode; //this is set later in initGxm
+static bool wireFrame = false;
 
 //not used yet
 #define MAX_IDX_NUMBER 0xC000 // Maximum allowed number of indices per draw call for glDrawArrays
@@ -1400,6 +1401,12 @@ void clearScreen()
 		gxmSyncObjs[gxmBackBufferIndex], //fragment sync object
 		&gxmColorSurfaces[gxmBackBufferIndex],
 		&gxmDepthStencilSurface);
+
+	// Get previous fill mode, clear screen requires to be set to FILL
+	bool previousMode = wireFrame;
+
+	sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
+	sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
 	
 	//clear the screen
 	{
@@ -1425,6 +1432,13 @@ void clearScreen()
 
 		sceGxmSetVertexStream(gxmContext, 0, clearVerticesData);
 		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, clearIndicesData, 4);
+	}
+
+	//restore previous mode if necessary
+	if (wireFrame)
+	{
+		sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
+		sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
 	}
 }
 
@@ -1999,7 +2013,18 @@ int main()
 		}
 		if (ctrlData.buttons & SCE_CTRL_TRIANGLE)
 		{
-			running = false;
+			wireFrame = !wireFrame;
+
+			if (wireFrame)
+			{
+				sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
+				sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
+			}
+			else
+			{
+				sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
+				sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
+			}
 		}
 
 		double rx = (ctrlData.rx - 128.0) / 128.0;
