@@ -1,8 +1,8 @@
 #include "terrain.h"
 #include <cmath>
 
-// Vertices per side for each LOD
-static const int LOD_VERTICES[TerrainChunk::LOD_COUNT] = { 33, 17, 9, 5 };
+// Vertices per side for each LOD (densest first)
+static const int LOD_VERTICES[TerrainChunk::LOD_COUNT] = { 65, 33, 17, 9, 5 };
 
 TerrainChunk::TerrainChunk(int chunkXin, int chunkZin, float chunkWorldSize, float terrainHeight)
 	: chunkX(chunkXin), chunkZ(chunkZin), chunkSize(chunkWorldSize), currentLOD(LOD_0)

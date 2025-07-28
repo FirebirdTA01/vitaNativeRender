@@ -2292,7 +2292,7 @@ int main()
 			renderedChunks++;
 		}
 
-		sceClibPrintf("Rendered %d/%d chunks\n", renderedChunks, Terrain::CHUNKS_PER_SIDE * Terrain::CHUNKS_PER_SIDE);
+		//sceClibPrintf("Rendered %d/%d chunks\n", renderedChunks, Terrain::CHUNKS_PER_SIDE * Terrain::CHUNKS_PER_SIDE);
 
 		//then basic cubes
 		sceGxmSetVertexProgram(gxmContext, gxmBasicVertexProgramPatched);
