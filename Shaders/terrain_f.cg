@@ -60,11 +60,11 @@ float3 fresnelSchlick(float3 F0, float3 hVec, float3 vVec)
 }
 
 void main(
-    float2 pass_texCoord : TEXCOORD0,
-    float2 pass_blendMapTexCoord : TEXCOORD1, // Not used in simplified version
+    half2 pass_texCoord : TEXCOORD0_HALF,
+    half2 pass_blendMapTexCoord : TEXCOORD1_HALF, // Not used in simplified version
     float4 pass_surfaceNormal : TEXCOORD2,
-    float4 pass_worldPosition : TEXCOORD3,
-    float4 pass_surfaceToViewVector : TEXCOORD4,
+    half4 pass_worldPosition : TEXCOORD3_HALF,
+    half4 pass_surfaceToViewVector : TEXCOORD4_HALF,
     float4 pass_tangent : TEXCOORD5,
     float4 pass_bitangent : TEXCOORD6,
 
@@ -94,6 +94,8 @@ void main(
     float3 N = normalize(pass_surfaceNormal.xyz);
     float3 T = normalize(pass_tangent.xyz);
     float3 B = normalize(pass_bitangent.xyz);
+    //
+    float3 V = normalize(pass_surfaceToViewVector.xyz);
     
     // Adjust for handedness
     if (dot(cross(N, T), B) < 0.0)
@@ -119,19 +121,29 @@ void main(
         float distSq = dot(surfaceToLight, surfaceToLight);
 
         //early out
-        if(distSq >= u_perPFrame.u_lightRadii[i] * u_perPFrame.u_lightRadii[i]) continue;
+        //if(distSq >= u_perPFrame.u_lightRadii[i] * u_perPFrame.u_lightRadii[i]) continue;
+        // mask - 1 if inside radius, otherwise 0
+        float radius = u_perPFrame.u_lightRadii[i];
+        float radiusSq = radius * radius;
+        float insideMask = step(distSq, radiusSq);
+        // ^^ now we can multiply all contributions by insideMask to avoid branches in code
 
         float3 L = normalize(surfaceToLight);
-        float3 V = normalize(pass_surfaceToViewVector.xyz);
+        //     V = calculated before loop
         float3 H = normalize(L + V);
 
         float dist = length(surfaceToLight);
         float attenuation = 0.0;
-        if (dist < u_perPFrame.u_lightRadii[i])
-        {
-            attenuation = u_perPFrame.u_lightPowers[i] / (4.0 * pi * dist * dist);
-            attenuation = attenuation * (1.0 - dist / u_perPFrame.u_lightRadii[i]);
-        }
+
+        //if (dist < u_perPFrame.u_lightRadii[i])
+        //{
+        //    attenuation = u_perPFrame.u_lightPowers[i] / (4.0 * pi * dist * dist);
+        //    attenuation = attenuation * (1.0 - dist / u_perPFrame.u_lightRadii[i]);
+        //}
+
+        attenuation = u_perPFrame.u_lightPowers[i] / (4.0 * pi * dist * dist);
+        attenuation = attenuation * (1.0 - dist / u_perPFrame.u_lightRadii[i]);
+        attenuation = attenuation * insideMask;
 
         float NdotL = max(dot(transformedNormal, L), 0.0);
         if (NdotL > 0.0)

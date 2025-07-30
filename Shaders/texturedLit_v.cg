@@ -15,9 +15,9 @@ float4 main(
 	// Per draw call uniform
 	uniform float4x4 u_modelMatrix, // Remains in "default" buffer (no semantic)
 
-	out float2 pass_texCoord : TEXCOORD0,
-	out float4 pass_surfaceNormal : TEXCOORD1,
-	out float4 pass_worldPosition : TEXCOORD2) : POSITION
+	out half2 pass_texCoord : TEXCOORD0_HALF,
+	out half4 pass_surfaceNormal : TEXCOORD1_HALF,
+	out half4 pass_worldPosition : TEXCOORD2_HALF) : POSITION
 {
 	float4 worldPosition = mul(u_modelMatrix, float4(position, 1.0));
 	float4 clipPosition = mul(u_perVFrame.u_projectionMatrix, mul(u_perVFrame.u_viewMatrix, worldPosition));

@@ -19,9 +19,9 @@ static const float PI = 3.14159265;
 static const float INV_PI = 0.31831; // 1/pi
 
 void main(
-	float2 pass_texCoord : TEXCOORD0,
-	float4 pass_surfaceNormal : TEXCOORD1,
-	float4 pass_worldPosition : TEXCOORD2,
+	half2 pass_texCoord : TEXCOORD0_HALF,
+	half4 pass_surfaceNormal : TEXCOORD1_HALF,
+	half4 pass_worldPosition : TEXCOORD2_HALF,
 
 	uniform sampler2D u_texture, // per group, set via texture binding
 

@@ -5,8 +5,8 @@ float4 main(
 	uniform float u_alpha,
     uniform float4x4 u_transform,
 
-	out float2 pass_texCoord: TEXCOORD0,
-	out float pass_alpha : COLOR) : POSITION
+	out half2 pass_texCoord: TEXCOORD0_HALF,
+	out half pass_alpha : COLOR) : POSITION
 {	
 	pass_texCoord = texCoord;
 	pass_alpha = u_alpha;

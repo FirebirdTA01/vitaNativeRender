@@ -1,6 +1,6 @@
 void main(
-	float2 pass_texCoord : TEXCOORD0,
-	float pass_alpha : COLOR,
+	half2 pass_texCoord : TEXCOORD0_HALF,
+	half pass_alpha : COLOR,
 	uniform sampler2D u_texture,
 	out float4 out_color : COLOR)
 {

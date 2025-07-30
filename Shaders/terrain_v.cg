@@ -20,12 +20,12 @@ void main(
 
 	uniform row_major float4x4 u_modelMatrix,
 
-	out float4 out_position : POSITION,
-	out float2 pass_texCoord : TEXCOORD0,
-	out float2 pass_blendMapTexCoord : TEXCOORD1,
+	out half4 out_position : POSITION,
+	out half2 pass_texCoord : TEXCOORD0_HALF,
+	out half2 pass_blendMapTexCoord : TEXCOORD1_HALF,
 	out float4 pass_surfaceNormal : TEXCOORD2,
-	out float4 pass_worldPosition : TEXCOORD3,
-	out float4 pass_surfaceToViewVector : TEXCOORD4,
+	out half4 pass_worldPosition : TEXCOORD3_HALF,
+	out half4 pass_surfaceToViewVector : TEXCOORD4_HALF,
 	out float4 pass_tangent : TEXCOORD5,
 	out float4 pass_bitangent : TEXCOORD6)
 {
