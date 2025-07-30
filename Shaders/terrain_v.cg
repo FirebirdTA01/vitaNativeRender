@@ -34,7 +34,7 @@ void main(
 	out_position = mul(u_perVFrame.u_projectionMatrix, mul(u_perVFrame.u_viewMatrix, worldPosition));
 
 	//tile 400x across terrain tiles
-    pass_texCoord = in_texCoord * 400.0;
+    pass_texCoord = in_texCoord; // * 400.0; UVs are scaled on the CPU
 	//unitled for blend map
     pass_blendMapTexCoord = in_texCoord;
 	

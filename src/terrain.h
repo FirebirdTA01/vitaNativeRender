@@ -79,6 +79,7 @@ public:
 	static constexpr int TERRAIN_GRID_SIZE = CHUNKS_PER_SIDE * CHUNK_GRID_SIZE;
 	static constexpr float TERRAIN_SIZE = 500.0f;
 	static constexpr float CHUNK_SIZE = TERRAIN_SIZE / CHUNKS_PER_SIDE;
+	static constexpr float TEXTURE_TILE_COUNT = 400.0f; // Number of texture repititions across the entire terrain tile
 
 	Terrain();
 	~Terrain();

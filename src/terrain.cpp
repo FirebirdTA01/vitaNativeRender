@@ -202,6 +202,8 @@ void TerrainChunk::generateLODMesh(int verticesPerSide, LODMesh& lodMesh)
 	// Y is up and grid is on XZ plane
 	Vector3f normal = { 0.0f, 1.0f, 0.0f };
 	// Tangents and bitangents are set in PBRVertex constructor
+	// For correct tiling of texture
+	float uvScale = Terrain::TEXTURE_TILE_COUNT / Terrain::TERRAIN_SIZE;
 
 	// Generate Vertices
 	for (int z = 0; z < verticesPerSide; z++)
@@ -214,11 +216,10 @@ void TerrainChunk::generateLODMesh(int verticesPerSide, LODMesh& lodMesh)
 			pos.y = 0.0f;
 			pos.z = (chunkZ * chunkSize) + (z * vertexSpacing);
 
-			// UV coordinates - map to the chunks portion of the texture
-			// Texture repeats over each chunk
+			// UV coordinates - tile across the entire terrain
 			Vector2f uv;
-			uv.x = static_cast<float>(x) / static_cast<float>(gridSize);
-			uv.y = static_cast<float>(z) / static_cast<float>(gridSize);
+			uv.x = ((chunkX * chunkSize) + (x * vertexSpacing)) * uvScale;
+			uv.y = ((chunkZ * chunkSize) + (z * vertexSpacing)) * uvScale;
 
 			PBRVertex vertex(pos, uv, normal);
 			lodMesh.vertices.push_back(vertex);

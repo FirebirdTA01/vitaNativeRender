@@ -135,14 +135,9 @@ void main(
         float dist = length(surfaceToLight);
         float attenuation = 0.0;
 
-        //if (dist < u_perPFrame.u_lightRadii[i])
-        //{
-        //    attenuation = u_perPFrame.u_lightPowers[i] / (4.0 * pi * dist * dist);
-        //    attenuation = attenuation * (1.0 - dist / u_perPFrame.u_lightRadii[i]);
-        //}
-
         attenuation = u_perPFrame.u_lightPowers[i] / (4.0 * pi * dist * dist);
         attenuation = attenuation * (1.0 - dist / u_perPFrame.u_lightRadii[i]);
+        //Instead of having the above attenuation inside an if (dist < u_perPFrame.u_lightRadii[i])
         attenuation = attenuation * insideMask;
 
         float NdotL = max(dot(transformedNormal, L), 0.0);
