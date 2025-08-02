@@ -1,7 +1,6 @@
 #pragma once
 
 #include <psp2/kernel/sysmem.h>
-#include <psp2/kernel/clib.h>
 #include <psp2/types.h>
 #include <psp2/gxm.h>
 #include "commonUtils.h"

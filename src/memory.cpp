@@ -1,13 +1,14 @@
 #include "memory.h"
+#include <psp2/kernel/clib.h>
 
 void* gpuAllocMap(size_t size, SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpuAttribs, SceUID* uid)
 {
 	int err = SCE_OK;
 	SceUID memUid;
 	void* memAddr = nullptr;
+	size_t requested = size;
 
-	sceClibPrintf("Allocating GPU memory of size 0x%08X\n", size);
-	sceClibPrintf("Memory type: %d\n", type);
+	sceClibPrintf("Allocating GPU memory of type: %d\n", type);
 
 	if (type == SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW)
 	{
@@ -17,6 +18,8 @@ void* gpuAllocMap(size_t size, SceKernelMemBlockType type, SceGxmMemoryAttribFla
 	{
 		size = ALIGN(size, 4 * 1024);
 	}
+
+	sceClibPrintf("... size before alignment: %u bytes, aligned to %u bytes", (unsigned)requested, (unsigned)size);
 
 	memUid = sceKernelAllocMemBlock("gpumem", type, size, NULL);
 	if (memUid >= SCE_OK)
@@ -68,10 +71,13 @@ void* gpuVertexUsseAllocMap(size_t size, unsigned int* usseOffset, SceUID* uid)
 	int err = SCE_OK;
 	SceUID memUid;
 	void* memAddr = nullptr;
+	size_t requested = size;
 
-	sceClibPrintf("Allocating Vertex USSE memory of size 0x%08X\n", size);
+	sceClibPrintf("Allocating Vertex USSE memory\n");
 
 	size = ALIGN(size, 4 * 1024);
+
+	sceClibPrintf("... size before alignment: %u bytes, aligned to %u bytes", (unsigned)requested, (unsigned)size);
 
 	memUid = sceKernelAllocMemBlock("vertex_usse", SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, size, NULL);
 	if (memUid >= SCE_OK)
@@ -125,10 +131,13 @@ void* gpuFragmentUsseAllocMap(size_t size, unsigned int* usseOffset, SceUID* uid
 	int err = SCE_OK;
 	SceUID memUid;
 	void* memAddr = nullptr;
+	size_t requested = size;
 
-	sceClibPrintf("Allocating Fragment USSE memory of size 0x%08X\n", size);
+	sceClibPrintf("Allocating Fragment USSE memory");
 
 	size = ALIGN(size, 4 * 1024);
+
+	sceClibPrintf("... size before alignment: %u bytes, aligned to %u bytes", (unsigned)requested, (unsigned)size);
 
 	memUid = sceKernelAllocMemBlock("fragment_usse", SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, size, NULL);
 	if (memUid >= SCE_OK)
