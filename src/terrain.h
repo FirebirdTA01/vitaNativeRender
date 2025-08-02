@@ -44,11 +44,12 @@ class TerrainChunk
 public:
 	enum LODLevel
 	{
-		LOD_0 = 0,	// 32x32
-		LOD_1,		// 16x16
-		LOD_2,		// 8x8
-		LOD_3,		// 4x4
-//		LOD_4,		// 2x2
+		LOD_0 = 0,	// 64x64
+		LOD_1,		// 32x32
+		LOD_2,		// 16x16
+		LOD_3,		// 8x8
+		LOD_4,		// 2x2
+		//LOD_5,		// 2x2
 		LOD_COUNT
 	};
 
@@ -64,7 +65,7 @@ public:
 		std::vector<uint16_t>* tempIndices;
 	};
 
-	static constexpr int MaxResidentLOD = 3; // keep LOD_0...LOD_3 resident
+	//static constexpr int MaxResidentLOD = 3; // keep LOD_0...LOD_3 resident
 
 	TerrainChunk(int chunkX, int chunkZ, float chunkWorldSize, float terrainHeight = 0.0f);
 	~TerrainChunk();
@@ -110,25 +111,26 @@ private:
 	LODMesh lodMeshes[LOD_COUNT];
 	LODLevel currentLOD;
 
-	// Distance thresholds for edge-aware LOD (chunk size - 500 / 8 = 62.5)
+	// Distance thresholds for edge-aware LOD (chunk size - 500 / 10 = 62.5)
 	static constexpr float LOD_DISTANCES[LOD_COUNT] = {
-		0.0f,	// LOD_0: 0 - 10 units
-		10.0f,	// LOD_1: 10 - 30 units
-		30.0f,	// LOD_2: 30 - 100
-		100.0f,	// LOD_3: 100 - 250
-//		250.0f	// LOD_4: 250+
+		0.0f,	// LOD_0: 0 - 1 units
+		1.0f,	// LOD_1: 1 - 2 units
+		2.0f,	// LOD_2: 2 - 10
+		10.0f,	// LOD_3: 10 - 50
+		50.0f	// LOD_4: 50+
+		//75.0f	// LOD_5: 75+
 	};
 };
 
 class Terrain
 {
 public:
-	static constexpr int CHUNKS_PER_SIDE = 6; // 6x6 chunks per terrain tile
-	static constexpr int CHUNK_GRID_SIZE = 32; // Each chunk is 64x64 at highest LOD
+	static constexpr int CHUNKS_PER_SIDE = 14; // 14x14 chunks per terrain tile
+	static constexpr int CHUNK_GRID_SIZE = 64; // Each chunk is 64x64 at highest LOD
 	static constexpr int TERRAIN_GRID_SIZE = CHUNKS_PER_SIDE * CHUNK_GRID_SIZE;
 	static constexpr float TERRAIN_SIZE = 500.0f;
 	static constexpr float CHUNK_SIZE = TERRAIN_SIZE / CHUNKS_PER_SIDE;
-	static constexpr float TEXTURE_TILE_COUNT = 400.0f; // Number of texture repititions across the entire terrain tile
+	static constexpr float TEXTURE_TILE_COUNT = 100.0f; // Number of texture repititions across the entire terrain tile
 
 	Terrain();
 	~Terrain();

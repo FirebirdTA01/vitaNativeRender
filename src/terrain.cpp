@@ -4,7 +4,7 @@
 #include <cmath>
 
 // Vertices per side for each LOD (densest first)
-static const int LOD_VERTICES[TerrainChunk::LOD_COUNT] = { 33, 17, 9, 5 };
+static const int LOD_VERTICES[TerrainChunk::LOD_COUNT] = { 65, 33, 17, 9, 3, };
 
 TerrainBufferPool::TerrainBufferPool()
 	: vertexPoolUID(-1), indexPoolUID(-1),
