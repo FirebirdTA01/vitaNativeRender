@@ -1,11 +1,111 @@
 #include "terrain.h"
+#include "memory.h"
+#include <psp2/kernel/clib.h>
 #include <cmath>
 
 // Vertices per side for each LOD (densest first)
 static const int LOD_VERTICES[TerrainChunk::LOD_COUNT] = { 33, 17, 9, 5 };
 
+TerrainBufferPool::TerrainBufferPool()
+	: vertexPoolUID(-1), indexPoolUID(-1),
+	vertexPoolBase(nullptr), indexPoolBase(nullptr),
+	vertexPoolSize(0), indexPoolSize(0),
+	currentVertexOffset(0), currentIndexOffset(0)
+{
+
+}
+
+TerrainBufferPool::~TerrainBufferPool()
+{
+	if (vertexPoolUID >= 0)
+	{
+		gpuFreeUnmap(vertexPoolUID);
+	}
+	if (indexPoolUID >= 0)
+	{
+		gpuFreeUnmap(indexPoolUID);
+	}
+}
+
+// Pre-calculate total size needed and allocate pools
+bool TerrainBufferPool::init(size_t totalVertexSize, size_t totalIndexSize)
+{
+	// Align to CDRAM requirements
+	vertexPoolSize = ALIGN(totalVertexSize, 256 * 1024);
+	indexPoolSize = ALIGN(totalIndexSize, 256 * 1024);
+
+	sceClibPrintf("TerrainBufferPool: Allocating vertex pool %u bytes(actual: %u)\n", (unsigned)vertexPoolSize, (unsigned)totalVertexSize);
+	sceClibPrintf("TerrainBufferPool: Allocating index pool %u bytes (actual: %u\n", (unsigned)indexPoolSize, (unsigned)totalIndexSize);
+
+	// Allocate vertex pool
+	vertexPoolBase = gpuAllocMap(vertexPoolSize, SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+		SCE_GXM_MEMORY_ATTRIB_READ, &vertexPoolUID);
+
+	if (!vertexPoolBase)
+	{
+		sceClibPrintf("ERROR: Failed to allocate vertex pool!\n");
+		return false;
+	}
+
+	//Allocate index pool
+	indexPoolBase = gpuAllocMap(indexPoolSize, SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+		SCE_GXM_MEMORY_ATTRIB_READ, &indexPoolUID);
+
+	if (!indexPoolBase)
+	{
+		sceClibPrintf("ERROR: Failed to allocate index pool\n");
+
+		gpuFreeUnmap(vertexPoolUID);
+		vertexPoolUID = -1;
+
+		return false;
+	}
+
+	return true;
+}
+
+TerrainBufferPool::BufferAllocation TerrainBufferPool::allocateVertices(size_t size)
+{
+	BufferAllocation allocation;
+	allocation.size = size;
+	allocation.offset = currentVertexOffset;
+	allocation.gpuData = (uint8_t*)vertexPoolBase + currentVertexOffset;
+	allocation.cpuData = nullptr; // set when data is uploaded
+
+	currentVertexOffset += size;
+	//Align next allocation to 16 bytes for GPU efficiency
+	currentVertexOffset = ALIGN(currentVertexOffset, 16);
+
+	return allocation;
+}
+
+TerrainBufferPool::BufferAllocation TerrainBufferPool::allocateIndices(size_t size)
+{
+	BufferAllocation allocation;
+	allocation.size = size;
+	allocation.offset = currentIndexOffset;
+	allocation.gpuData = (uint8_t*)indexPoolBase + currentIndexOffset;
+	allocation.cpuData = nullptr; // set when data is uploaded
+
+	currentIndexOffset += size;
+	//Align next allocation to 16 bytes for GPU efficiency
+	currentIndexOffset = ALIGN(currentIndexOffset, 16);
+
+	return allocation;
+}
+
+void* TerrainBufferPool::getVertexPoolBase() const
+{
+	return vertexPoolBase;
+}
+
+void* TerrainBufferPool::getIndexPoolBase() const
+{
+	return indexPoolBase;
+}
+
 TerrainChunk::TerrainChunk(int chunkXin, int chunkZin, float chunkWorldSize, float terrainHeight)
-	: chunkX(chunkXin), chunkZ(chunkZin), chunkSize(chunkWorldSize), currentLOD(LOD_0)
+	: chunkX(chunkXin), chunkZ(chunkZin), chunkSize(chunkWorldSize), currentLOD(LOD_0), bufferPool(nullptr)
 {
 	// Calculate world position of chunk center
 	center.x = (chunkX + 0.5f) * chunkSize;
@@ -18,12 +118,86 @@ TerrainChunk::TerrainChunk(int chunkXin, int chunkZin, float chunkWorldSize, flo
 	// Generate all LODs
 	for (int i = 0; i < LOD_COUNT; i++)
 	{
-		generateLODMesh(LOD_VERTICES[i], lodMeshes[i]);
+		//generateLODMesh(LOD_VERTICES[i], lodMeshes[i]);
+		lodMeshes[i].tempVertices = new std::vector<PBRVertex>();
+		lodMeshes[i].tempIndices = new std::vector<uint16_t>();
 	}
 }
 
 TerrainChunk::~TerrainChunk()
 {
+}
+
+void TerrainChunk::initializeWithPool(TerrainBufferPool* pool)
+{
+	bufferPool = pool;
+
+	// Generate all LODs
+	for (int i = 0; i < LOD_COUNT; i++)
+	{
+		generateLODMesh(LOD_VERTICES[i], lodMeshes[i]);
+
+		//Allocate GPU memory from pool
+		size_t vertexSize = lodMeshes[i].vertexCount * sizeof(PBRVertex);
+		size_t indexSize = lodMeshes[i].indexCount * sizeof(uint16_t);
+
+		lodMeshes[i].vertexAlloc = bufferPool->allocateVertices(vertexSize);
+		lodMeshes[i].indexAlloc = bufferPool->allocateIndices(indexSize);
+	}
+}
+
+void TerrainChunk::calculateMemoryRequirements(size_t& vertexSize, size_t& indexSize)
+{
+	vertexSize = 0;
+	indexSize = 0;
+
+	for (int lod = 0; lod < LOD_COUNT; lod++)
+	{
+		int verticesPerSide = LOD_VERTICES[lod];
+		int vertexCount = verticesPerSide * verticesPerSide;
+		int gridSize = verticesPerSide - 1;
+		int indexCount = gridSize * gridSize * 6;
+
+		vertexSize += vertexCount * sizeof(PBRVertex);
+		indexSize += indexCount * sizeof(uint16_t);
+	}
+}
+
+//Upload mesh data to GPU pool
+void TerrainChunk::uploadToGPU()
+{
+	for (int i = 0; i < LOD_COUNT; i++)
+	{
+		auto& mesh = lodMeshes[i];
+
+		// Copy vertex data to GPU
+		if (mesh.tempVertices && mesh.vertexAlloc.gpuData)
+		{
+			memcpy(mesh.vertexAlloc.gpuData,
+				mesh.tempVertices->data(),
+				mesh.tempVertices->size() * sizeof(PBRVertex));
+		}
+
+		// Copy index data to GPU
+		if (mesh.tempIndices && mesh.indexAlloc.gpuData)
+		{
+			memcpy(mesh.indexAlloc.gpuData,
+				mesh.tempIndices->data(),
+				mesh.tempIndices->size() * sizeof(uint16_t));
+		}
+	}
+}
+
+//Release temporary CPU data after upload
+void TerrainChunk::releaseCPUData()
+{
+	for (int i = 0; i < LOD_COUNT; i++)
+	{
+		delete lodMeshes[i].tempVertices;
+		delete lodMeshes[i].tempIndices;
+		lodMeshes[i].tempVertices = nullptr;
+		lodMeshes[i].tempIndices = nullptr;
+	}
 }
 
 TerrainChunk::LODLevel TerrainChunk::calculateLOD(const Vector3f& cameraPos) const
@@ -191,12 +365,15 @@ bool TerrainChunk::isInFrustum(const Matrix4x4& viewProjMatrix) const
 
 void TerrainChunk::generateLODMesh(int verticesPerSide, LODMesh& lodMesh)
 {
-	lodMesh.vertices.clear();
-	lodMesh.indices.clear();
+	if (!lodMesh.tempVertices || !lodMesh.tempIndices)
+		return;
+
+	lodMesh.tempVertices->clear();
+	lodMesh.tempIndices->clear();
 
 	int gridSize = verticesPerSide - 1;
-	lodMesh.vertices.reserve(verticesPerSide * verticesPerSide);
-	lodMesh.indices.reserve(gridSize * gridSize * 6);
+	lodMesh.tempVertices->reserve(verticesPerSide * verticesPerSide);
+	lodMesh.tempIndices->reserve(gridSize * gridSize * 6);
 
 	float vertexSpacing = chunkSize / static_cast<float>(gridSize);
 	// Y is up and grid is on XZ plane
@@ -222,7 +399,7 @@ void TerrainChunk::generateLODMesh(int verticesPerSide, LODMesh& lodMesh)
 			uv.y = ((chunkZ * chunkSize) + (z * vertexSpacing)) * uvScale;
 
 			PBRVertex vertex(pos, uv, normal);
-			lodMesh.vertices.push_back(vertex);
+			lodMesh.tempVertices->push_back(vertex);
 		}
 	}
 
@@ -234,19 +411,19 @@ void TerrainChunk::generateLODMesh(int verticesPerSide, LODMesh& lodMesh)
 			unsigned int start = z * verticesPerSide + x;
 
 			//Triangle 1
-			lodMesh.indices.push_back(start);
-			lodMesh.indices.push_back(start + verticesPerSide);
-			lodMesh.indices.push_back(start + 1);
+			lodMesh.tempIndices->push_back(start);
+			lodMesh.tempIndices->push_back(start + verticesPerSide);
+			lodMesh.tempIndices->push_back(start + 1);
 
 			//Triangle 2
-			lodMesh.indices.push_back(start + 1);
-			lodMesh.indices.push_back(start + verticesPerSide);
-			lodMesh.indices.push_back(start + verticesPerSide + 1);
+			lodMesh.tempIndices->push_back(start + 1);
+			lodMesh.tempIndices->push_back(start + verticesPerSide);
+			lodMesh.tempIndices->push_back(start + verticesPerSide + 1);
 		}
 	}
 
-	lodMesh.vertexCount = lodMesh.vertices.size();
-	lodMesh.indexCount = lodMesh.indices.size();
+	lodMesh.vertexCount = lodMesh.tempVertices->size();
+	lodMesh.indexCount = lodMesh.tempIndices->size();
 }
 
 Terrain::Terrain()
@@ -283,6 +460,63 @@ Terrain::Terrain()
 Terrain::~Terrain()
 {
 
+}
+
+bool Terrain::initialize()
+{
+	sceClibPrintf("Initializing terrain system...\n");
+
+	//Calculate total memory requirements
+	size_t totalVertexSize = 0;
+	size_t totalIndexSize = 0;
+	size_t chunkVertexSize, chunkIndexSize;
+
+	TerrainChunk::calculateMemoryRequirements(chunkVertexSize, chunkIndexSize);
+	totalVertexSize = chunkVertexSize * CHUNKS_PER_SIDE * CHUNKS_PER_SIDE;
+	totalIndexSize = chunkIndexSize * CHUNKS_PER_SIDE * CHUNKS_PER_SIDE;
+
+	sceClibPrintf("Total terrain memory requirements:\n");
+	sceClibPrintf("\tVertices: %u bytes\n", (unsigned)totalVertexSize);
+	sceClibPrintf("\tIndices: %u bytes\n", (unsigned)totalIndexSize);
+	sceClibPrintf("\tToatl: %u bytes (%.2f MB)\n", (unsigned)(totalVertexSize + totalIndexSize), (totalVertexSize + totalIndexSize) / (1024.0f * 1024.0f));
+
+	//Create buffer pool
+	bufferPool = std::unique_ptr<TerrainBufferPool>(new TerrainBufferPool());
+	if (!bufferPool->init(totalVertexSize, totalIndexSize))
+	{
+		sceClibPrintf("ERROR: Failed to initialize terrain buffer pool\n");
+		return false;
+	}
+
+	// Create all chunks
+	chunks.reserve(CHUNKS_PER_SIDE * CHUNKS_PER_SIDE);
+
+	for (int z = 0; z < CHUNKS_PER_SIDE; z++)
+	{
+		for (int x = 0; x < CHUNKS_PER_SIDE; x++)
+		{
+			auto chunk = std::unique_ptr<TerrainChunk>(new TerrainChunk(x, z, CHUNK_SIZE));
+
+			chunk->initializeWithPool(bufferPool.get());
+			chunks.push_back(std::move(chunk));
+		}
+	}
+
+	sceClibPrintf("Uploading terrain data to GPU...\n");
+
+	for (auto& chunk : chunks)
+	{
+		chunk->uploadToGPU();
+	}
+
+	sceClibPrintf("Releasing temporary CPU data...\n");
+
+	for (auto& chunk : chunks)
+	{
+		chunk->releaseCPUData();
+	}
+
+	return true;
 }
 
 std::vector<TerrainChunk*> Terrain::getVisibleChunks(const Matrix4x4& viewProjMatrix)
@@ -349,6 +583,11 @@ void Terrain::updateLODs(const Vector3f& cameraPos)
 		TerrainChunk::LODLevel newLOD = chunk->calculateLOD(localCam);
 		chunk->setCurrentLOD(newLOD);
 	}
+}
+
+TerrainBufferPool* Terrain::getBufferPool()
+{
+	return bufferPool.get();
 }
 
 Matrix4x4& Terrain::getModelMatrix()

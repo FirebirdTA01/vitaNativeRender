@@ -4,6 +4,41 @@
 #include <vector>
 #include <memory>
 
+//GPU Buffer Pool for efficient memory usage
+//PSVita CDRAM type memory is very limited and alignment size is much larger than most meshes, leading to lots of waste
+class TerrainBufferPool
+{
+public:
+	struct BufferAllocation
+	{
+		void* cpuData; //CPU-side data pointer
+		void* gpuData; //GPU-mapped memory
+		size_t offset; //offset within the pool
+		size_t size; //size of this allocation
+	};
+
+	TerrainBufferPool();
+	~TerrainBufferPool();
+
+	// Pre-calculate total size needed and allocate pools
+	bool init(size_t totalVertexSize, size_t totalIndexSize);
+
+	BufferAllocation allocateVertices(size_t size);
+	BufferAllocation allocateIndices(size_t size);
+	void* getVertexPoolBase() const;
+	void* getIndexPoolBase() const;
+
+private:
+	SceUID vertexPoolUID;
+	SceUID indexPoolUID;
+	void* vertexPoolBase;
+	void* indexPoolBase;
+	size_t vertexPoolSize;
+	size_t indexPoolSize;
+	size_t currentVertexOffset;
+	size_t currentIndexOffset;
+};
+
 class TerrainChunk
 {
 public:
@@ -19,16 +54,29 @@ public:
 
 	struct LODMesh
 	{
-		std::vector<PBRVertex> vertices;
-		std::vector<uint16_t> indices;
+		TerrainBufferPool::BufferAllocation vertexAlloc;
+		TerrainBufferPool::BufferAllocation indexAlloc;
 		size_t vertexCount;
 		size_t indexCount;
+
+		//CPU-side data for generation (released after GPU upload)
+		std::vector<PBRVertex>* tempVertices;
+		std::vector<uint16_t>* tempIndices;
 	};
 
 	static constexpr int MaxResidentLOD = 3; // keep LOD_0...LOD_3 resident
 
 	TerrainChunk(int chunkX, int chunkZ, float chunkWorldSize, float terrainHeight = 0.0f);
 	~TerrainChunk();
+
+	// Functions used for use with memory pool
+	void initializeWithPool(TerrainBufferPool* pool);
+	static void calculateMemoryRequirements(size_t& vertexSize, size_t& indexSize);
+	//Upload mesh data to GPU pool
+	void uploadToGPU();
+	//Release temporary CPU data after upload
+	void releaseCPUData();
+	// End of functions for use with memory pool
 
 	// Get appropriate LOD based on camera distance
 	LODLevel calculateLOD(const Vector3f& cameraPos) const;
@@ -53,6 +101,7 @@ public:
 private:
 	void generateLODMesh(int verticesPerSide, LODMesh& lodMesh);
 
+	TerrainBufferPool* bufferPool;
 	int chunkX, chunkZ; // Coordinates in the terrain grid
 	Vector3f center;	// World space center of chunk
 	float boundingRadius;
@@ -84,6 +133,7 @@ public:
 	Terrain();
 	~Terrain();
 
+	bool initialize();
 	// Get chunks visible after frustum culling
 	std::vector<TerrainChunk*> getVisibleChunks(const Matrix4x4& viewProjMatrix);
 	// Get all chunks (for initialization)
@@ -97,10 +147,12 @@ public:
 	// Update LODs for all chunks
 	void updateLODs(const Vector3f& cameraPos);
 
+	TerrainBufferPool* getBufferPool();
 	Matrix4x4& getModelMatrix();
 
 private:
 	std::vector<std::unique_ptr<TerrainChunk> > chunks;
+	std::unique_ptr<TerrainBufferPool> bufferPool;
 	Matrix4x4 modelMatrix;
 	int visibleChunkCount;
 
