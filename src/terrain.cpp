@@ -2,6 +2,7 @@
 #include "memory.h"
 #include <psp2/kernel/clib.h>
 #include <cmath>
+#include <algorithm>
 
 // Vertices per side for each LOD (densest first)
 static const int LOD_VERTICES[TerrainChunk::LOD_COUNT] = { 65, 33, 17, 9, 3, };
@@ -200,23 +201,44 @@ void TerrainChunk::releaseCPUData()
 	}
 }
 
-TerrainChunk::LODLevel TerrainChunk::calculateLOD(const Vector3f& cameraPos) const
+// Calculates LOD based on cylinder from center for horizontal distance plus height for vertical LOD reduction
+TerrainChunk::LODLevel TerrainChunk::calculateLOD(const Vector3f& cameraPos, const Vector3f& viewDir) const
 {
-	// Distance from camera to chunk center
-	float dx = center.x - cameraPos.x;
-	float dy = center.y - cameraPos.y;
-	float dz = center.z - cameraPos.z;
-	float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+	// Horizontal edge (Square footprint)
+	float half = chunkSize * 0.5f;
+	// signed distance along each axis
+	float dx = std::abs(cameraPos.x - center.x) - half;
+	float dz = std::abs(cameraPos.z - center.z) - half;
+	//Only outside counts
+	float ex = std::max(dx, 0.0f);
+	float ez = std::max(dz, 0.0f);
+	//True euclidean distance outside of sqaure
+	float horizontalEdge = std::sqrt(ex * ex + ez * ez);
 
-	// Distance to chunk edge
-	float distToEdge = distance - boundingRadius;
-	if (distToEdge < 0.0f)
-		distToEdge = 0.0f; // inside the sphere
+	// Vertical height above chunk top
+	float heightAbove = cameraPos.y - center.y;
+	heightAbove = std::max(heightAbove, 0.0f);
+
+	// Height should have an effect on horizontal distance calculation too
+	const float horizontalMinHeight = 3.0f;
+	const float horizontalRampHeight = 25.0f; // ramp fully over this height
+	const float maxHorizontalHeightBoost = 3.0f;
+
+	// how far into the ramp we are [0…1]
+	float hb = std::clamp((heightAbove - horizontalMinHeight) / horizontalRampHeight, 0.0f, 1.0f);
+	float horizontalBoost = 1.0f + hb * (maxHorizontalHeightBoost - 1.0f);
+
+	// Only consider height when we're looking down
+	// View angle boost from how much we're looking down (1.0 when straight down, 0 when horizontal)
+	float downDot = std::clamp(-viewDir.y, 0.0f, 1.0f);
+	float verticalContribution = heightAbove * downDot;
+
+	float effectiveDistance = (horizontalEdge * horizontalBoost) + verticalContribution;
 
 	// Select LOD based on edge distance
 	for (int i = LOD_COUNT - 1; i >= 0; i--)
 	{
-		if (distToEdge >= LOD_DISTANCES[i])
+		if (effectiveDistance >= LOD_DISTANCES[i])
 		{
 			return static_cast<LODLevel>(i);
 		}
@@ -574,13 +596,13 @@ int Terrain::getTotalIndices() const
 	return total;
 }
 
-void Terrain::updateLODs(const Vector3f& cameraPos)
+void Terrain::updateLODs(const Vector3f& cameraPos, const Vector3f& viewDir)
 {
 	for (auto& chunk : chunks)
 	{
 		// shift camera into local terrain space
 		Vector3f localCam = cameraPos - terrainOffset;
-		TerrainChunk::LODLevel newLOD = chunk->calculateLOD(localCam);
+		TerrainChunk::LODLevel newLOD = chunk->calculateLOD(localCam, viewDir);
 		chunk->setCurrentLOD(newLOD);
 	}
 }

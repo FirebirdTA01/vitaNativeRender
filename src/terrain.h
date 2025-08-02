@@ -80,7 +80,7 @@ public:
 	// End of functions for use with memory pool
 
 	// Get appropriate LOD based on camera distance
-	LODLevel calculateLOD(const Vector3f& cameraPos) const;
+	LODLevel calculateLOD(const Vector3f& cameraPos, const Vector3f& viewDir) const;
 
 	//Get mesh data for specific LOD
 	LODMesh* getLODMesh(LODLevel lod);
@@ -113,11 +113,11 @@ private:
 
 	// Distance thresholds for edge-aware LOD (chunk size - 500 / 10 = 62.5)
 	static constexpr float LOD_DISTANCES[LOD_COUNT] = {
-		0.0f,	// LOD_0: 0 - 1 units
-		1.0f,	// LOD_1: 1 - 2 units
-		2.0f,	// LOD_2: 2 - 10
-		10.0f,	// LOD_3: 10 - 50
-		50.0f	// LOD_4: 50+
+		0.0f,	// LOD_0: 0 - 2 units
+		2.0f,	// LOD_1: 2 - 4 units
+		4.0f,	// LOD_2: 2 - 16
+		16.0f,	// LOD_3: 16 - 64
+		64.0f	// LOD_4: 64+
 		//75.0f	// LOD_5: 75+
 	};
 };
@@ -125,10 +125,10 @@ private:
 class Terrain
 {
 public:
-	static constexpr int CHUNKS_PER_SIDE = 14; // 14x14 chunks per terrain tile
+	static constexpr int CHUNKS_PER_SIDE = 10; // 10x10 chunks per terrain tile
 	static constexpr int CHUNK_GRID_SIZE = 64; // Each chunk is 64x64 at highest LOD
 	static constexpr int TERRAIN_GRID_SIZE = CHUNKS_PER_SIDE * CHUNK_GRID_SIZE;
-	static constexpr float TERRAIN_SIZE = 500.0f;
+	static constexpr float TERRAIN_SIZE = 512.0f;
 	static constexpr float CHUNK_SIZE = TERRAIN_SIZE / CHUNKS_PER_SIDE;
 	static constexpr float TEXTURE_TILE_COUNT = 100.0f; // Number of texture repititions across the entire terrain tile
 
@@ -147,7 +147,7 @@ public:
 	int getTotalIndices() const;
 
 	// Update LODs for all chunks
-	void updateLODs(const Vector3f& cameraPos);
+	void updateLODs(const Vector3f& cameraPos, const Vector3f& viewDir);
 
 	TerrainBufferPool* getBufferPool();
 	Matrix4x4& getModelMatrix();

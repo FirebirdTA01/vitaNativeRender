@@ -1745,23 +1745,23 @@ int main()
 	Texture terrainDiffuseTex, terrainRoughTex, terrainNormalTex;
 
 	terrainDiffuseTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
-	terrainDiffuseTex.setSize(repeatingGravel_512_diffuse_width, repeatingGravel_512_diffuse_height);
+	terrainDiffuseTex.setSize(repeatingGravel_256_diffuse_width, repeatingGravel_256_diffuse_height);
 	terrainDiffuseTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainDiffuseTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
 	terrainRoughTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
-	terrainRoughTex.setSize(repeatingGravel_512_roughness_width, repeatingGravel_512_roughness_height);
+	terrainRoughTex.setSize(repeatingGravel_256_roughness_width, repeatingGravel_256_roughness_height);
 	terrainRoughTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainRoughTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
 	terrainNormalTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
-	terrainNormalTex.setSize(repeatingGravel_512_normal_width, repeatingGravel_512_normal_height);
+	terrainNormalTex.setSize(repeatingGravel_256_normal_width, repeatingGravel_256_normal_height);
 	terrainNormalTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainNormalTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
-	terrainDiffuseTex.loadFromData(repeatingGravel_512_diffuse_data, repeatingGravel_512_diffuse_comp);
-	terrainRoughTex.loadFromData(repeatingGravel_512_roughness_data, repeatingGravel_512_roughness_comp);
-	terrainNormalTex.loadFromData(repeatingGravel_512_normal_data, repeatingGravel_512_normal_comp, true);
+	terrainDiffuseTex.loadFromData(repeatingGravel_256_diffuse_data, repeatingGravel_256_diffuse_comp);
+	terrainRoughTex.loadFromData(repeatingGravel_256_roughness_data, repeatingGravel_256_roughness_comp);
+	terrainNormalTex.loadFromData(repeatingGravel_256_normal_data, repeatingGravel_256_normal_comp, true);
 
 	//set model position and rotation
 	Vector3f colorCubePosition = { -0.8f, 1.0f, -2.5f };
@@ -2048,7 +2048,7 @@ int main()
 			lightThreeCenter.z + lightThreeRadius * sinf(lightThreeAngle)));
 
 		// Update terrain LODs
-		terrain.updateLODs(cameraPosition);
+		terrain.updateLODs(cameraPosition, camera.getForwardVector());
 
 		// Get view-projection matrix for frustum culling (only used on terrain for now)
 		// incorporate the terrain's model transform into the cull test
