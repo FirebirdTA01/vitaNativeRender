@@ -1,6 +1,8 @@
 //PBR terrain fragment shader for PSVita
 
 #pragma argument (O4; fastmath; fastprecision; fastint)
+// Prefetch uniforms into SA registers
+//#pragma register_buffer BUFFER[0]
 
 struct UniformBufferFragmentLightingSimple
 {
@@ -19,7 +21,7 @@ float distributionGGX(float3 N, float3 H, float roughness)
 {
     float a = roughness * roughness;
     float a2 = a * a;
-    float NdotH = max(dot(N, H), 0.0);
+    half NdotH = max(dot(N, H), (half)0.0);
     float NdotH2 = NdotH * NdotH;
     
     float denom = (NdotH2 * (a2 - 1.0) + 1.0);
@@ -40,8 +42,8 @@ float geometrySchlickGGX(float NdotV, float roughness)
 
 float geometrySmith(float3 N, float3 V, float3 L, float roughness)
 {
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
+    half NdotV = max(dot(N, V), (half)0.0);
+    half NdotL = max(dot(N, L), (half)0.0);
     float ggx1 = geometrySchlickGGX(NdotL, roughness);
     float ggx2 = geometrySchlickGGX(NdotV, roughness);
 
@@ -62,40 +64,40 @@ float3 fresnelSchlick(float3 F0, float3 hVec, float3 vVec)
 void main(
     half2 pass_texCoord : TEXCOORD0_HALF,
     half2 pass_blendMapTexCoord : TEXCOORD1_HALF, // Not used in simplified version
-    float4 pass_surfaceNormal : TEXCOORD2,
+    half4 pass_surfaceNormal : TEXCOORD2_HALF,
     half4 pass_worldPosition : TEXCOORD3_HALF,
     half4 pass_surfaceToViewVector : TEXCOORD4_HALF,
-    float4 pass_tangent : TEXCOORD5,
-    float4 pass_bitangent : TEXCOORD6,
+    half4 pass_tangent : TEXCOORD5_HALF,
 
     // Simple texture uniforms - no flags needed
     uniform sampler2D u_diffuseMap : TEXUNIT0,
     uniform sampler2D u_normalMap : TEXUNIT1,
     uniform sampler2D u_roughnessMap : TEXUNIT2,
     
-    uniform float3 u_F0, // Fresnel reflectance at normal incidence
+    uniform half3 u_F0, // Fresnel reflectance at normal incidence
 
-    out float4 out_color : COLOR)
+    out half4 out_color : COLOR)
 {
+    // Reconstruct TBN all in half
+    half3 N = normalize(pass_surfaceNormal.xyz);
+    half3 T = normalize(pass_tangent.xyz);
+    half h = pass_tangent.w;
+    half3 B = cross(N, T) * h;
+
+    half3 V = normalize(pass_surfaceToViewVector.xyz);
+
     // Initialize ambient light
-    float3 ambient = float3(0.05, 0.05, 0.05);
-    float3 totalLight = float3(0.0, 0.0, 0.0);
+    half3 ambient = half3(0.05, 0.05, 0.05);
+    half3 totalLight = half3(0.0, 0.0, 0.0);
 
     // Sample textures directly - no conditional logic
-    float3 albedo = tex2D(u_diffuseMap, pass_texCoord).rgb;
-    float roughness = tex2D(u_roughnessMap, pass_texCoord).r;
-    float3 normalFromMap = tex2D(u_normalMap, pass_texCoord).rgb * 2.0 - 1.0;
+    half3 albedo = tex2D(u_diffuseMap, pass_texCoord).rgb;
+    half roughness = tex2D(u_roughnessMap, pass_texCoord).r;
+    half3 normalFromMap = tex2D(u_normalMap, pass_texCoord).rgb * 2.0 - 1.0;
     
     // Hardcoded material properties for terrain
-    float metallic = 0.0; // Terrain is non-metallic
-    float ao = 1.0; // No AO map, assume full lighting
-    
-    // Normalize the input vectors
-    float3 N = normalize(pass_surfaceNormal.xyz);
-    float3 T = normalize(pass_tangent.xyz);
-    float3 B = normalize(pass_bitangent.xyz);
-    //
-    float3 V = normalize(pass_surfaceToViewVector.xyz);
+    half metallic = 0.0; // Terrain is non-metallic
+    half ao = 1.0; // No AO map, assume full lighting
     
     // Adjust for handedness
     if (dot(cross(N, T), B) < 0.0)
@@ -104,12 +106,12 @@ void main(
     }
     
     // Construct the TBN matrix
-    float3x3 TBN = float3x3(T, B, N);
+    half3x3 TBN = half3x3(T, B, N);
     
     // Transform normal from tangent space to world space
-    float3 transformedNormal = normalize(mul(TBN, normalFromMap));
+    half3 transformedNormal = normalize(mul(TBN, normalFromMap));
     
-    float pi = 3.14159265;
+    half pi = 3.14159265;
     
     unsigned int lightCount = u_perPFrame.u_lightCount;
 
@@ -117,52 +119,52 @@ void main(
     for (unsigned int i = 0; i < lightCount; i++)
     {
         // Compute the vector from the surface to the light
-        float3 surfaceToLight = u_perPFrame.u_lightPositions[i] - pass_worldPosition.xyz;
-        float distSq = dot(surfaceToLight, surfaceToLight);
+        half3 surfaceToLight = u_perPFrame.u_lightPositions[i] - pass_worldPosition.xyz;
+        half distSq = dot(surfaceToLight, surfaceToLight);
 
         //early out
         //if(distSq >= u_perPFrame.u_lightRadii[i] * u_perPFrame.u_lightRadii[i]) continue;
         // mask - 1 if inside radius, otherwise 0
-        float radius = u_perPFrame.u_lightRadii[i];
-        float radiusSq = radius * radius;
-        float insideMask = step(distSq, radiusSq);
+        half radius = u_perPFrame.u_lightRadii[i];
+        half radiusSq = radius * radius;
+        half insideMask = step(distSq, radiusSq);
         // ^^ now we can multiply all contributions by insideMask to avoid branches in code
 
-        float3 L = normalize(surfaceToLight);
+        half3 L = normalize(surfaceToLight);
         //     V = calculated before loop
-        float3 H = normalize(L + V);
+        half3 H = normalize(L + V);
 
-        float dist = length(surfaceToLight);
-        float attenuation = 0.0;
+        half dist = length(surfaceToLight);
+        half attenuation = 0.0;
 
         attenuation = u_perPFrame.u_lightPowers[i] / (4.0 * pi * dist * dist);
         attenuation = attenuation * (1.0 - dist / u_perPFrame.u_lightRadii[i]);
         //Instead of having the above attenuation inside an if (dist < u_perPFrame.u_lightRadii[i])
         attenuation = attenuation * insideMask;
 
-        float NdotL = max(dot(transformedNormal, L), 0.0);
+        half NdotL = max(dot(transformedNormal, L), (half)0.0);
         if (NdotL > 0.0)
         {
-            float3 lightColor = u_perPFrame.u_lightColors[i];
+            half3 lightColor = u_perPFrame.u_lightColors[i];
             lightColor *= attenuation;
 
             // Fresnel-Schlick approximation for reflectance
-            float3 F = fresnelSchlick(u_F0, H, V);
-            float NDF = distributionGGX(transformedNormal, H, roughness);
-            float G = geometrySmith(transformedNormal, V, L, roughness);
+            half3 F = fresnelSchlick(u_F0, H, V);
+            half NDF = distributionGGX(transformedNormal, H, roughness);
+            half G = geometrySmith(transformedNormal, V, L, roughness);
 
             // Specular term
-            float3 numerator = NDF * G * F;
-            float denominator = 4.0 * max(dot(transformedNormal, V), 0.001) * max(dot(transformedNormal, L), 0.001);
-            float3 specular = numerator / denominator;
+            half3 numerator = NDF * G * F;
+            half denominator = 4.0 * max(dot(transformedNormal, V), 0.001) * max(dot(transformedNormal, L), 0.001);
+            half3 specular = numerator / denominator;
 
             // kS is the Fresnel reflectance, kD is the diffuse component
-            float3 kS = F;
-            float3 kD = 1.0 - kS;
+            half3 kS = F;
+            half3 kD = 1.0 - kS;
             kD *= 1.0 - metallic; // Will be 1.0 since metallic is 0
 
             // Lambertian diffuse
-            float3 diffuse = kD * albedo / pi;
+            half3 diffuse = kD * albedo / pi;
 
             // Accumulate light contribution
             totalLight += (diffuse + specular) * NdotL * lightColor;
@@ -170,11 +172,11 @@ void main(
     }
     
     // Apply ambient occlusion (hardcoded to 1.0)
-    float3 ambientContribution = ambient * albedo * ao;
+    half3 ambientContribution = ambient * albedo * ao;
     totalLight += ambientContribution;
 
     // Final color (no emissive in simplified version)
-    float3 finalColor = totalLight;
+    half3 finalColor = totalLight;
 
     // Simple gamma correction
     //finalColor = pow(finalColor, float3(1.0 / 2.2));

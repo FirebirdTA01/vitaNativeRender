@@ -23,11 +23,11 @@ void main(
 	out half4 out_position : POSITION,
 	out half2 pass_texCoord : TEXCOORD0_HALF,
 	out half2 pass_blendMapTexCoord : TEXCOORD1_HALF,
-	out float4 pass_surfaceNormal : TEXCOORD2,
+	out half4 pass_surfaceNormal : TEXCOORD2_HALF,
 	out half4 pass_worldPosition : TEXCOORD3_HALF,
 	out half4 pass_surfaceToViewVector : TEXCOORD4_HALF,
-	out float4 pass_tangent : TEXCOORD5,
-	out float4 pass_bitangent : TEXCOORD6)
+	out half4 pass_tangent : TEXCOORD5_HALF // pack sign in .w 
+	)
 {
     float4 worldPosition = mul(u_modelMatrix, float4(in_position, 1.0));
 	
@@ -38,11 +38,18 @@ void main(
 	//unitled for blend map
     pass_blendMapTexCoord = in_texCoord;
 	
-    pass_surfaceNormal = float4(normalize(mul((float3x3) u_modelMatrix, in_normal)), 1.0);
-    pass_tangent = float4(normalize(mul((float3x3) u_modelMatrix, in_tangent)), 1.0);
-    pass_bitangent = float4(normalize(mul((float3x3) u_modelMatrix, in_bitangent)), 1.0);
+    float3 N = normalize(mul((float3x3) u_modelMatrix, in_normal));
+	pass_surfaceNormal = half4(N, 0.0);
 	
-	pass_worldPosition = worldPosition;
+	//Tangent + handedness
+    float3 T = normalize(mul((float3x3) u_modelMatrix, in_tangent));
+	//Dropping this and packing the sign into tangent
+	float3 B = normalize(mul((float3x3)u_modelMatrix, in_bitangent));
+	// +1 if (N×T)·B>0, else –1
+	float handedness = dot(cross(N, T), B) < 0.0 ? -1.0 : 1.0;
+	pass_tangent = half4(T, handedness);
 	
-    pass_surfaceToViewVector = float4(u_perVFrame.u_cameraPosition - worldPosition.xyz, 1.0);
+	pass_worldPosition = half4(worldPosition);
+	
+    pass_surfaceToViewVector = half4(u_perVFrame.u_cameraPosition - worldPosition.xyz, 0.0);
 }
