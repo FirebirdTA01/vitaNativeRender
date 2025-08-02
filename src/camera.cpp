@@ -88,6 +88,7 @@ void Camera::setRotation(Vector3f rot)
 {
 	this->rotation = rot;
 	this->viewMatrix = createViewMatrix(position, rotation);
+	updateVectors();
 }
 
 void Camera::varyPosition(Vector3f deltaPosition)
