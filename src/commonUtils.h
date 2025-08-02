@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #define PI 3.1415926535897932384626433832795028841971693993751f
 
 struct Vector2f
@@ -14,6 +16,28 @@ struct Vector2f
 		x = inX;
 		y = inY;
 	}
+
+	float length() const
+	{
+		return sqrtf(x * x + y * y);
+	}
+
+	float lengthSquared() const
+	{
+		return x * x + y * y;
+	}
+
+	Vector2f normalized() const
+	{
+		float len = length();
+		return len > 0 ? Vector2f(x / len, y / len) : Vector2f(0.0f, 0.0f);
+	}
+
+	float dot(const Vector2f& op) const
+	{
+		return x * op.x + y * op.y;
+	}
+
 	float x, y;
 };
 
@@ -31,6 +55,28 @@ struct Vector3f
 		y = inY;
 		z = inZ;
 	}
+
+	float length() const
+	{
+		return sqrtf(x * x + y * y + z * z);
+	}
+
+	float lengthSquared() const
+	{
+		return x * x + y * y + z * z;
+	}
+
+	Vector3f normalized() const
+	{
+		float len = length();
+		return len > 0 ? Vector3f(x / len, y / len, z / len) : Vector3f(0.0f, 0.0f, 0.0f);
+	}
+
+	float dot(const Vector3f& op) const
+	{
+		return x * op.x + y * op.y + z * op.z;
+	}
+
 	//union { float x; float u; };
 	//union { float y; float g; };
 	//union { float z; float b; };
