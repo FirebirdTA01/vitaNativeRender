@@ -14,9 +14,10 @@
 #include "matrix.h"
 #include "camera.h"
 #include "light.h"
+#include "terrain.h"
+#include "texture.h"
 #include "EMP_Logo.h"
 #include "EMP_Logo_Alpha.h"
-#include "terrain.h"
 #include "terrainTextures.h"
 
 #define DISPLAY_WIDTH 960 // Default display width in pixels
@@ -1513,6 +1514,7 @@ int main()
 	};
 
 	Terrain terrain;
+	terrain.initialize();
 
 	//allocate memory for the vertex data
 	sceClibPrintf("Allocating memory for the vertex data...\n");
@@ -1574,6 +1576,7 @@ int main()
 	//	indexData[i] = cubeIndices[i];
 	//}
 
+	/*
 	std::vector<ChunkGPUData> chunkGPUData;
 	chunkGPUData.resize(Terrain::CHUNKS_PER_SIDE* Terrain::CHUNKS_PER_SIDE);
 
@@ -1606,15 +1609,15 @@ int main()
 			);
 
 			// Copy data
-			memcpy(gpuData.vertexPtrs[lod], lodMesh->vertices.data(), lodMesh->vertexCount * sizeof(PBRVertex));
-			memcpy(gpuData.indexPtrs[lod], lodMesh->indices.data(), lodMesh->indexCount * sizeof(uint16_t));
+			memcpy(gpuData.vertexPtrs[lod], lodMesh->tempVertices->data(), lodMesh->vertexCount * sizeof(PBRVertex));
+			memcpy(gpuData.indexPtrs[lod], lodMesh->tempIndices->data(), lodMesh->indexCount * sizeof(uint16_t));
 		}
 		
 		chunkIndex++;
-	}
+	}*/
 
 	// Allocate memory for the texture data and load the texture
-	SceGxmTexture texture, alphaTexture, allWhiteTexture, terrainDiffuse, terrainNormal, terrainRoughness;
+	SceGxmTexture texture, alphaTexture, allWhiteTexture;// , terrainDiffuse, terrainNormal, terrainRoughness;
 	SceUID textureID = 0;
 	SceUID alphaTextureID = 0;
 	SceUID allWhiteTextureID = 0;
@@ -1624,9 +1627,11 @@ int main()
 	void* textureData = nullptr;
 	void* alphaTextureData = nullptr;
 	void* allWhiteTextureData = nullptr;
+	/*
 	void* terrainDiffuseData = nullptr;
 	void* terrainNormalData = nullptr;
 	void* terrainRoughnessData = nullptr;
+	*/
 	int initResult = 0;
 
 	sceClibPrintf("Allocating memory for the texture data...\n");
@@ -1646,6 +1651,7 @@ int main()
 		&allWhiteTextureID);
 	memcpy(allWhiteTextureData, allWhite_data, sizeof(allWhite_data));
 
+	/*
 	terrainDiffuseData = gpuAllocMap(repeatingGravel_512_diffuse_width * repeatingGravel_512_diffuse_height * repeatingGravel_512_diffuse_comp,
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
 		&terrainDiffuseID);
@@ -1660,6 +1666,7 @@ int main()
 		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, SCE_GXM_MEMORY_ATTRIB_READ,
 		&terrainRoughnessID);
 	memcpy(terrainRoughnessData, repeatingGravel_512_roughness_data, sizeof(repeatingGravel_512_roughness_data));
+	*/
 
 	sceClibPrintf("Initializing texture...\n");
 	initResult = sceGxmTextureInitLinear(&texture, textureData, SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR, EMP_Logo_Small_width, EMP_Logo_Small_height, 0);
@@ -1683,6 +1690,7 @@ int main()
 		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
 	}
 
+	/*
 	sceClibPrintf("Initializing terrain diffuse texture...\n");
 	initResult = sceGxmTextureInitLinear(&terrainDiffuse, terrainDiffuseData, SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR, repeatingGravel_512_diffuse_width, repeatingGravel_512_diffuse_height, 0);
 	if (initResult != 0)
@@ -1703,6 +1711,9 @@ int main()
 	{
 		sceClibPrintf("sceGxmTextureInitLinear() failed: 0x%08X\n", initResult);
 	}
+	*/
+
+
 
 	// Set some texture parameters
 	sceGxmTextureSetMinFilter(&texture, SCE_GXM_TEXTURE_FILTER_LINEAR);
@@ -1711,6 +1722,7 @@ int main()
 	sceGxmTextureSetUAddrMode(&texture, SCE_GXM_TEXTURE_ADDR_REPEAT);
 	sceGxmTextureSetVAddrMode(&texture, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
+	/*
 	sceGxmTextureSetMinFilter(&terrainDiffuse, SCE_GXM_TEXTURE_FILTER_LINEAR);
 	sceGxmTextureSetMagFilter(&terrainDiffuse, SCE_GXM_TEXTURE_FILTER_LINEAR);
 	sceGxmTextureSetMipFilter(&terrainDiffuse, SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
@@ -1728,6 +1740,28 @@ int main()
 	sceGxmTextureSetMipFilter(&terrainRoughness, SCE_GXM_TEXTURE_MIP_FILTER_DISABLED);
 	sceGxmTextureSetUAddrMode(&terrainRoughness, SCE_GXM_TEXTURE_ADDR_REPEAT);
 	sceGxmTextureSetVAddrMode(&terrainRoughness, SCE_GXM_TEXTURE_ADDR_REPEAT);
+	*/
+
+	Texture terrainDiffuseTex, terrainRoughTex, terrainNormalTex;
+
+	terrainDiffuseTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
+	terrainDiffuseTex.setSize(repeatingGravel_512_diffuse_width, repeatingGravel_512_diffuse_height);
+	terrainDiffuseTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
+	terrainDiffuseTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
+
+	terrainRoughTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
+	terrainRoughTex.setSize(repeatingGravel_512_roughness_width, repeatingGravel_512_roughness_height);
+	terrainRoughTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
+	terrainRoughTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
+
+	terrainNormalTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
+	terrainNormalTex.setSize(repeatingGravel_512_normal_width, repeatingGravel_512_normal_height);
+	terrainNormalTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
+	terrainNormalTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
+
+	terrainDiffuseTex.loadFromData(repeatingGravel_512_diffuse_data, repeatingGravel_512_diffuse_comp);
+	terrainRoughTex.loadFromData(repeatingGravel_512_roughness_data, repeatingGravel_512_roughness_comp);
+	terrainNormalTex.loadFromData(repeatingGravel_512_normal_data, repeatingGravel_512_normal_comp, true);
 
 	//set model position and rotation
 	Vector3f colorCubePosition = { -0.8f, 1.0f, -2.5f };
@@ -2083,14 +2117,19 @@ int main()
 		sceGxmSetVertexUniformBuffer(gxmContext, perFrameTerrainVertexContainer, perFrameTerrainVertexUniformBuffer);
 		sceGxmSetFragmentUniformBuffer(gxmContext, perFrameTerrainFragmentContainer, perFrameTerrainFragmentUniformBuffer);
 
-		sceGxmSetFragmentTexture(gxmContext, 0, &terrainDiffuse);
-		sceGxmSetFragmentTexture(gxmContext, 1, &terrainNormal);
-		sceGxmSetFragmentTexture(gxmContext, 2, &terrainRoughness);
+		sceGxmSetFragmentTexture(gxmContext, 0, terrainDiffuseTex.getTexture());
+		sceGxmSetFragmentTexture(gxmContext, 1, terrainNormalTex.getTexture());
+		sceGxmSetFragmentTexture(gxmContext, 2, terrainRoughTex.getTexture());
+
+		//Get buffer pool base address (terrain meshes are pooled into common ALIGN'ed chunks)
+		void* vertexPoolBase = terrain.getBufferPool()->getVertexPoolBase();
+		void* indexPoolBase = terrain.getBufferPool()->getIndexPoolBase();
 
 		// Render the visible chunks
 		int renderedChunks = 0;
 		for (TerrainChunk* chunk : visibleChunks)
 		{
+			/*
 			// Find the chunk index (For GPU data lookup)
 			int chunkX = 0, chunkZ = 0;
 
@@ -2104,11 +2143,22 @@ int main()
 			ChunkGPUData& gpuData = chunkGPUData[chunkIndex];
 			TerrainChunk::LODLevel currentLOD = chunk->getCurrentLOD();
 			TerrainChunk::LODMesh* lodMesh = chunk->getCurrentLODMesh();
+			*/
+
+			// Use the pool instead of the above
+
+			const TerrainChunk::LODMesh* lodMesh = chunk->getCurrentLODMesh();
+
+			//Calculate acutal GPU addresses from pool + offset
+			void* vertexData = (uint8_t*)vertexPoolBase + lodMesh->vertexAlloc.offset;
+			void* indexData = (uint8_t*)indexPoolBase + lodMesh->indexAlloc.offset;
 
 			//Bind and render
-			sceGxmSetVertexStream(gxmContext, 0, gpuData.vertexPtrs[currentLOD]);
-			sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, 
-				gpuData.indexPtrs[currentLOD], lodMesh->indexCount);
+			//sceGxmSetVertexStream(gxmContext, 0, gpuData.vertexPtrs[currentLOD]);
+			sceGxmSetVertexStream(gxmContext, 0, vertexData);
+			//sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, 
+			//	gpuData.indexPtrs[currentLOD], lodMesh->indexCount);
+			sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, indexData, lodMesh->indexCount);
 
 			renderedChunks++;
 		}
