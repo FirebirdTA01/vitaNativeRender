@@ -7,6 +7,10 @@ option(SAFE_HOMEBREW "Sign the build as a safe homebrew" ON)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
+# Ensure the shader output directory exists even when BUILD_SHADERS is off
+set(SHADER_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/out/shaders")
+file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
+
 # add_subdirectory(src)
 # doing this will allow us to use the SHADER_OBJS variable in the src CMakeLists.txt file
 add_subdirectory(src ${CMAKE_CURRENT_BINARY_DIR}/src)
