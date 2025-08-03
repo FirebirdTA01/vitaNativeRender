@@ -161,6 +161,7 @@ Matrix4x4 createProjectionMatrix(float fov, float aspectRatio, float nearPlane, 
 	projectionMatrix.getData()[10] = (farPlane + nearPlane) / frustumLength;
 	projectionMatrix.getData()[11] = (2.0f * farPlane * nearPlane) / frustumLength;
 	projectionMatrix.getData()[14] = -1.0f;
+	projectionMatrix.getData()[15] = 0.0f;
 
 	return projectionMatrix;
 }
