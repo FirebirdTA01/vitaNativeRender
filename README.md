@@ -15,6 +15,10 @@ This project targets the PlayStation Vita and uses the VitaSDK toolchain.
    ```sh
    cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=psvita-toolchain.cmake
    ```
+   To link against existing precompiled shader binaries instead of rebuilding them, add `-DBUILD_SHADERS=OFF`:
+   ```sh
+   cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=psvita-toolchain.cmake -DBUILD_SHADERS=OFF
+   ```
 2. Compile and package the project:
    ```sh
    cmake --build build

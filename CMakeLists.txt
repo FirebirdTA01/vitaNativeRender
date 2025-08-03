@@ -18,7 +18,7 @@ add_subdirectory(src ${CMAKE_CURRENT_BINARY_DIR}/src)
 if(BUILD_SHADERS)
     message(STATUS "Shaders will be built and linked")
 else()
-    message(STATUS "Skipping shader build and linkage")
+    message(STATUS "Using precompiled shader binaries")
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
