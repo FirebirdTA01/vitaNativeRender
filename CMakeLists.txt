@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.13.4)
 project(Vita_FinalRenderer)
 
 option(BUILD_SHADERS "Build and link shader binaries" ON)
+option(SAFE_HOMEBREW "Sign the build as a safe homebrew" ON)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 

@@ -5,6 +5,12 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(TITLE_ID "NTVRNDR02")
 
+if(SAFE_HOMEBREW)
+    set(VITA_FSELF_SAFE_FLAG -s)
+    # Clear ATTRIBUTE fields in param.sfo so the package doesn't request extended permissions
+    set(VITA_MKSFOEX_SAFE_FLAGS -d ATTRIBUTE=0x0 -d ATTRIBUTE2=0x0 -s)
+endif()
+
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -66,14 +72,14 @@ endif()
 
 add_custom_command(OUTPUT EBOOT.BIN
 	COMMAND vita-elf-create $<TARGET_FILE:${PROJECT_NAME}> ${PROJECT_NAME}.velf
-	COMMAND vita-make-fself -s ${PROJECT_NAME}.velf EBOOT.BIN
+	COMMAND vita-make-fself ${VITA_FSELF_SAFE_FLAG} ${PROJECT_NAME}.velf EBOOT.BIN
 	DEPENDS ${PROJECT_NAME}
 	COMMENT "Creating EBOOT.BIN"
 )
 
 add_custom_command(OUTPUT "${PROJECT_NAME}.vpk"
-	COMMAND vita-mksfoex -s TITLE_ID=${TITLE_ID} "${PROJECT_NAME}" param.sfo
-	COMMAND vita-pack-vpk -s param.sfo -b EBOOT.BIN ${PROJECT_NAME}.vpk
+	COMMAND vita-mksfoex ${VITA_MKSFOEX_SAFE_FLAGS} TITLE_ID=${TITLE_ID} "${PROJECT_NAME}" param.sfo
+	COMMAND vita-pack-vpk ${VITA_FSELF_SAFE_FLAG} param.sfo -b EBOOT.BIN ${PROJECT_NAME}.vpk
 	DEPENDS EBOOT.BIN
 	COMMENT "Creating ${PROJECT_NAME}.vpk"
 )
@@ -86,5 +92,5 @@ add_custom_target(
 
 add_custom_target(
     CreateVPK ALL
-    DEPENDS ${PROJECT_NAME}.VPK
+    DEPENDS ${PROJECT_NAME}.vpk
 )
