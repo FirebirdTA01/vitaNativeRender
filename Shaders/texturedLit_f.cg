@@ -1,5 +1,7 @@
 //Pass an argument to the shader compiler for highest optimization level
 #pragma argument (O4; fastmath; fastprecision; fastint)
+#pragma branch(flatten: always)
+#pragma loop(unroll: always)
 
 // Per frame uniforms are the same for all entities in the frame
 // These don't change between draw calls (only frame to frame)
@@ -15,8 +17,8 @@ struct PerFrameFragmentUniforms
 
 PerFrameFragmentUniforms u_perPFrame : BUFFER[0];
 
-static const float PI = 3.14159265;
-static const float INV_PI = 0.31831; // 1/pi
+static const half PI = 3.14159265;
+static const half INV_PI = 0.31831; // 1/pi
 
 void main(
 	half2 pass_texCoord : TEXCOORD0_HALF,
@@ -25,93 +27,61 @@ void main(
 
 	uniform sampler2D u_texture, // per group, set via texture binding
 
-	out float4 out_color : COLOR)
+	out half4 out_color : COLOR)
 {
 	// Start with ambient
-	float3 totalLight = float3(0.05, 0.05, 0.05);
+	half3 totalLight = half3(0.05, 0.05, 0.05);
 
-	float3 surfaceNormal = normalize(pass_surfaceNormal.xyz);
+	half3 N = normalize(pass_surfaceNormal.xyz);
 	// Calculate the view direction for specular lighting
-	float3 viewDir = normalize(u_perPFrame.u_cameraPosition - pass_worldPosition.xyz);
+	half3 viewDir = normalize(u_perPFrame.u_cameraPosition - pass_worldPosition.xyz);
 	
 	for(unsigned int i = 0; i < u_perPFrame.u_lightCount; i++)
     {
-		float3 surfaceToLight = u_perPFrame.u_lightPositions[i].xyz - pass_worldPosition.xyz;
-		float distSq = dot(surfaceToLight, surfaceToLight); //faster than length2
+		half r = (half)u_perPFrame.u_lightRadii[i];
+		half r2 = r * r;
+		half invR = half(1.0) / r;
 
-		float radiusSq = u_perPFrame.u_lightRadii[i] * u_perPFrame.u_lightRadii[i];
+		half3 surfaceToLight = u_perPFrame.u_lightPositions[i].xyz - pass_worldPosition.xyz;
+		half distSq = dot(surfaceToLight, surfaceToLight); //faster than length2
 
-		if(distSq < radiusSq)
-		{
-			// Reciprocal square root (often faster than sqrt + divide)
-			float invDist = rsqrt(distSq);
-			float dist = distSq * invDist;
-			float3 lightDir = surfaceToLight * invDist;
+		// mask for whether we're inside the radius of a light
+		half inside = step(distSq, r2);
 
-			// Diffuse lighting
-			float NdotL = saturate(dot(surfaceNormal, lightDir));
+		half invD = rsqrt(distSq); // Reciprocal square root (often faster than sqrt + divide)
+		//Light direction
+		half3 L = surfaceToLight * invD;
 
-			// Simplified attenuation
-			float invRadius = 1.0 / u_perPFrame.u_lightRadii[i];
-			float attenuationFactor = u_perPFrame.u_lightPowers[i] * (1.0 - (dist * invRadius));
-			float attenuation = max(attenuationFactor * INV_PI / distSq, 0.0);
+		// N.L * mask
+		half NdotL = saturate(dot(N, L)) * inside;
 
-			// Simplified Specular (no pow)
-			float3 halfVec = normalize(lightDir + viewDir); // Blinn-Phong
-			//float spec = pow(max(dot(surfaceNormal, halfVec), 0.0), specularPower);
-			//This is cheaper
-			float spec = max(dot(surfaceNormal, halfVec), 0.0);
-			spec = spec * spec; //spec ^2
-			spec = spec * spec; //spec ^4
-			spec = spec * spec; //spec ^8
-			spec = spec * spec; //spec ^16
-			float specularFactor = 0.5 * spec * attenuation;
+		// attenuation = (power * (1 - dist/r)) / (pi * dSquared)
+		half dist = distSq * invD;
+		half fall = (u_perPFrame.u_lightPowers[i] * (1 - dist * invR)) * INV_PI / distSq;
+		half attn = max(fall, 0.0f) * inside;
 
-			float lighting = NdotL * attenuation + 0.5 * spec * attenuation;
-			totalLight += u_perPFrame.u_lightColors[i].xyz * lighting;
-		}
+		// Blinn spec ^16
+		half3 H = normalize(L + viewDir);
+		half spec = saturate(dot(N, H));
+		spec = spec * spec; // ^2
+		spec = spec * spec; // ^4
+		spec = spec * spec; // ^8
+		spec = spec * spec;
 
-		//if(distSq < radiusSq)
-		//{
-		//	float dist = sqrt(distSq); //only one sqrt needed
-		//	float3 lightDir = surfaceToLight / dist; //normalize
+		spec = spec * inside;
 
-			// Diffuse lighting
-		//	float dotProduct = max(dot(surfaceNormal, lightDir), 0.0);
-
-			// Falloff with distance
-		//	float attenuationFactor = u_perPFrame.u_lightPowers[i] * (1.0 - (dist * invRadius));
-		//	float attenuation = max(attenuationFactor / (PI * distSq), 0.0);
-
-			// Specular lighting
-		//	float3 halfVec = normalize(lightDir + viewDir); // Blinn-Phong
-			//float spec = pow(max(dot(surfaceNormal, halfVec), 0.0), specularPower);
-			//This is cheaper
-		//	float spec = max(dot(surfaceNormal, halfVec), 0.0);
-		//	spec = spec * spec; //spec ^2
-		//	spec = spec * spec; //spec ^4
-		//	spec = spec * spec; //spec ^8
-		//	spec = spec * spec; //spec ^16
-		//	float specularFactor = 0.5 * spec * attenuation;
-
-			//diffuseLight += u_perPFrame.u_lightColors[i].xyz * dotProduct * attenuation;
-			//specularLight += u_perPFrame.u_lightColors[i].xyz * specularFactor;
-
-		//	totalLight += u_perPFrame.u_lightColors[i].xyz * (dotProduct * attenuation * specularFactor);
-		//}
+		//accumulate
+		half3 C = u_perPFrame.u_lightColors[i].xyz;
+		totalLight += C * (NdotL * attn + 0.5 * spec * attn);
 	}
 
-	//test
-	//float3 totalLight = u_perPFrame.u_lightColors[0].xyz;
-	//float3 totalLight = ambient + diffuseLight + specularLight;
-
 	// Clamp the total light to prevent overbrightening
-	float3 clampedLight = min(totalLight, float3(1.0, 1.0, 1.0));
+	half3 clampedLight = min(totalLight, half3(1.0, 1.0, 1.0));
 
 	// Sample the texture
-	float4 texColor = tex2D(u_texture, pass_texCoord);
+	half4 texColor = tex2D(u_texture, pass_texCoord);
 
 	// Combine the texture color with the lighting
-	out_color = float4(texColor.rgb * clampedLight, texColor.a);
-	//out_color = float4(surfaceNormal, 1.0);
+	out_color = half4(texColor.rgb * clampedLight, texColor.a);
+	//out_color = half4(surfaceNormal, 1.0);
 }

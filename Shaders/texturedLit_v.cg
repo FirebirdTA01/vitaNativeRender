@@ -7,7 +7,7 @@ struct PerFrameVertexUniforms
 };
 PerFrameVertexUniforms u_perVFrame : BUFFER[0];
 
-float4 main(
+half4 main(
 	float3 position : POSITION,
 	float2 texCoord : TEXCOORD0,
 	float3 normal : NORMAL,
@@ -19,14 +19,14 @@ float4 main(
 	out half4 pass_surfaceNormal : TEXCOORD1_HALF,
 	out half4 pass_worldPosition : TEXCOORD2_HALF) : POSITION
 {
-	float4 worldPosition = mul(u_modelMatrix, float4(position, 1.0));
-	float4 clipPosition = mul(u_perVFrame.u_projectionMatrix, mul(u_perVFrame.u_viewMatrix, worldPosition));
+	half4 worldPosition = mul(u_modelMatrix, float4(position, 1.0));
+	half4 clipPosition = mul(u_perVFrame.u_projectionMatrix, mul(u_perVFrame.u_viewMatrix, worldPosition));
 	
 	// Pass the texture coordinate to the fragment shader
 	pass_texCoord = texCoord;
 
 	//convert normal to worldspace and normalize it
-	pass_surfaceNormal = float4(normalize(mul((float3x3) u_modelMatrix, normal)), 1.0);
+	pass_surfaceNormal = half4(normalize(mul((float3x3) u_modelMatrix, normal)), 1.0);
 
 	pass_worldPosition = worldPosition;
 
