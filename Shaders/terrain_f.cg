@@ -3,6 +3,8 @@
 #pragma argument (O4; fastmath; fastprecision; fastint)
 // Prefetch uniforms into SA registers
 //#pragma register_buffer BUFFER[0]
+#pragma branch (flatten: default)
+#pragma loop (unroll: default)
 
 struct UniformBufferFragmentLightingSimple
 {
@@ -17,49 +19,52 @@ UniformBufferFragmentLightingSimple u_perPFrame : BUFFER[0];
 //lighting functions
 
 //normal distribution function
-float distributionGGX(float3 N, float3 H, float roughness)
-{
-    float a = roughness * roughness;
-    float a2 = a * a;
-    half NdotH = max(dot(N, H), (half)0.0);
-    float NdotH2 = NdotH * NdotH;
+//float distributionGGX(float3 N, float3 H, float roughness)
+//{
+//    float a = roughness * roughness;
+//    float a2 = a * a;
+//    half NdotH = max(dot(N, H), (half)0.0);
+//    float NdotH2 = NdotH * NdotH;
     
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    return a2 / (3.14159256 * denom * denom);
-}
+//    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+//    return a2 / (3.14159256 * denom * denom);
+//}
 
-float geometrySchlickGGX(float NdotV, float roughness)
-{
-    //float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
-    //float denom = NdotV * (1.0 - k) + k;
+//float geometrySchlickGGX(float NdotV, float roughness)
+//{
+//    //float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+//    //float denom = NdotV * (1.0 - k) + k;
 
-    //simplified (r+1)^2/8
-    float k = roughness * roughness * 0.125;
+//    //simplified (r+1)^2/8
+//    float k = roughness * roughness * 0.125;
 
     //return NdotV / (denom);
-    return NdotV / (NdotV * (1.0 - k) + k);
-}
+//    return NdotV / (NdotV * (1.0 - k) + k);
+//}
 
-float geometrySmith(float3 N, float3 V, float3 L, float roughness)
-{
-    half NdotV = max(dot(N, V), (half)0.0);
-    half NdotL = max(dot(N, L), (half)0.0);
-    float ggx1 = geometrySchlickGGX(NdotL, roughness);
-    float ggx2 = geometrySchlickGGX(NdotV, roughness);
+//float geometrySmith(float3 N, float3 V, float3 L, float roughness)
+//{
+//    half NdotV = max(dot(N, V), (half)0.0);
+//    half NdotL = max(dot(N, L), (half)0.0);
+//    float ggx1 = geometrySchlickGGX(NdotL, roughness);
+//    float ggx2 = geometrySchlickGGX(NdotV, roughness);
 
-    return ggx1 * ggx2;
-}
+//    return ggx1 * ggx2;
+//}
 
-float3 fresnelSchlick(float3 F0, float3 hVec, float3 vVec)
-{
-    //return F0 + (float3(1.0) - F0) * pow(1.0 - dot(vVec, hVec), 5.0);
+//float3 fresnelSchlick(float3 F0, float3 hVec, float3 vVec)
+//{
+//    //return F0 + (float3(1.0) - F0) * pow(1.0 - dot(vVec, hVec), 5.0);
 
-    //Much faster
-    float cosTheta = 1.0 - dot(vVec, hVec);
-    float cosTheta2 = cosTheta * cosTheta;
-    float cosTheta5 = cosTheta * cosTheta * cosTheta;
-    return F0 + (float3(1.0) - F0) * cosTheta5;
-}
+//    //Much faster
+//    float cosTheta = 1.0 - dot(vVec, hVec);
+//    float cosTheta2 = cosTheta * cosTheta;
+//    float cosTheta5 = cosTheta * cosTheta * cosTheta;
+//    return F0 + (float3(1.0) - F0) * cosTheta5;
+//}
+
+static const half PI = 3.14159265;
+static const half INV_PI = 0.31830988618;
 
 void main(
     half2 pass_texCoord : TEXCOORD0_HALF,
@@ -67,7 +72,7 @@ void main(
     half4 pass_surfaceNormal : TEXCOORD2_HALF,
     half4 pass_worldPosition : TEXCOORD3_HALF,
     half4 pass_surfaceToViewVector : TEXCOORD4_HALF,
-    half4 pass_tangent : TEXCOORD5_HALF,
+    half4 pass_tangent : TEXCOORD5_HALF, // xyz = T, .w = handedness sign
 
     // Simple texture uniforms - no flags needed
     uniform sampler2D u_diffuseMap : TEXUNIT0,
@@ -78,110 +83,141 @@ void main(
 
     out half4 out_color : COLOR)
 {
-    // Reconstruct TBN all in half
+    // Reconstruct TBN
     half3 N = normalize(pass_surfaceNormal.xyz);
     half3 T = normalize(pass_tangent.xyz);
-    half h = pass_tangent.w;
-    half3 B = cross(N, T) * h;
-
-    half3 V = normalize(pass_surfaceToViewVector.xyz);
-
-    // Initialize ambient light
-    half3 ambient = half3(0.05, 0.05, 0.05);
-    half3 totalLight = half3(0.0, 0.0, 0.0);
+    half3 B = cross(N, T) * pass_tangent.w;
+    half3x3 TBN = half3x3(T, B, N);
 
     // Sample textures directly - no conditional logic
     half3 albedo = tex2D(u_diffuseMap, pass_texCoord).rgb;
     half roughness = tex2D(u_roughnessMap, pass_texCoord).r;
     half3 normalFromMap = tex2D(u_normalMap, pass_texCoord).rgb * 2.0 - 1.0;
+    half3 R = normalize (mul(TBN, normalFromMap));
+
+    //View vector
+    half3 V = normalize(pass_surfaceToViewVector.xyz);
+
+    //start with ambient light
+    half3 totalLight = half3(0.1, 0.1, 0.1);
     
     // Hardcoded material properties for terrain
     half metallic = 0.0; // Terrain is non-metallic
     half ao = 1.0; // No AO map, assume full lighting
+
+    // hoist the roughness pwers, fresnel complement, etc outside of light loop
+    half a = roughness * roughness;
+    half a2 = a * a;
+    half k = a2 * 0.125;
+    half3 invF0 = half3(1.0) - u_F0;
+    half oneOverFour = half(0.25);
     
     // Adjust for handedness
-    if (dot(cross(N, T), B) < 0.0)
-    {
-        B = -B; // Fixed: flip bitangent instead of tangent
-    }
-    
-    // Construct the TBN matrix
-    half3x3 TBN = half3x3(T, B, N);
-    
-    // Transform normal from tangent space to world space
-    half3 transformedNormal = normalize(mul(TBN, normalFromMap));
-    
-    half pi = 3.14159265;
-    
-    unsigned int lightCount = u_perPFrame.u_lightCount;
+    //if (dot(cross(N, T), B) < 0.0)
+    //{
+    //    B = -B; // Fixed: flip bitangent instead of tangent
+    //}
+
+    //allow unrolling by fixing the loop count to 8
+    half hc = half(u_perPFrame.u_lightCount);
 
     // Calculate lighting contributions for each light
-    for (unsigned int i = 0; i < lightCount; i++)
+    for (unsigned int i = 0; i < u_perPFrame.u_lightCount; i++)
     {
+        //mask out any lights >= count
+        //half maskCount = step(half(i) + half(0.5), hc);
+
         // Compute the vector from the surface to the light
         half3 surfaceToLight = u_perPFrame.u_lightPositions[i] - pass_worldPosition.xyz;
         half distSq = dot(surfaceToLight, surfaceToLight);
+        half radius = half(u_perPFrame.u_lightRadii[i]);
 
-        //early out
+        if(distSq > radius * radius)
+            continue;
+
+        //branchless
         //if(distSq >= u_perPFrame.u_lightRadii[i] * u_perPFrame.u_lightRadii[i]) continue;
-        // mask - 1 if inside radius, otherwise 0
-        half radius = u_perPFrame.u_lightRadii[i];
-        half radiusSq = radius * radius;
-        half insideMask = step(distSq, radiusSq);
-        // ^^ now we can multiply all contributions by insideMask to avoid branches in code
+        // insideMask == 1 only when distSq <= radius2 -> we invert it later
+        //half insideMask = step(radius * radius, distSq);
+        // ^^ now we can multiply all contributions by mask to avoid branches in code
 
-        half3 L = normalize(surfaceToLight);
-        //     V = calculated before loop
-        half3 H = normalize(L + V);
+        //half mask = maskCount * (half(1.0) - insideMask);
 
-        half dist = length(surfaceToLight);
-        half attenuation = 0.0;
+        //Normalize L
+        half invD = rsqrt(distSq);
+        half3 L = surfaceToLight * invD;
 
-        attenuation = u_perPFrame.u_lightPowers[i] / (4.0 * pi * dist * dist);
-        attenuation = attenuation * (1.0 - dist / u_perPFrame.u_lightRadii[i]);
-        //Instead of having the above attenuation inside an if (dist < u_perPFrame.u_lightRadii[i])
-        attenuation = attenuation * insideMask;
+        // N.L and predicated diffuse
+        half NdotL = max(dot(N, L), half(0.0));
+        //half NdotL = NL * mask;
 
-        half NdotL = max(dot(transformedNormal, L), (half)0.0);
-        if (NdotL > 0.0)
-        {
-            half3 lightColor = u_perPFrame.u_lightColors[i];
-            lightColor *= attenuation;
+        // Attenuation = power * (1 - dist/r) / (pi * d2)
+        half dist = distSq * invD; // = sqrt d2
+        half attenuation = u_perPFrame.u_lightPowers[i] 
+            * (half(1.0) - dist / radius)
+            * INV_PI
+            / distSq;
+
+
+        // Inline Fresnel-Schlick
+        half3 HVec  = normalize(L + V);
+        half cosVH  = 1 - max(dot(V, HVec), half(0.0));
+        half c2     = cosVH * cosVH;
+        half c5     = c2 * c2 * cosVH;
+        half3 Fcol  = u_F0 + (invF0) * c5;
+
+        // Inline GGX NDF
+        half NH     = max(dot(R, HVec), half(0.0));
+        half NH2    = NH * NH;
+        half denom = NH2 * (a2 - half(1.0)) + half(1.0);
+        half NDF = a2 / (PI * denom * denom);
+
+        // Inline geometry Smith
+        half NV = max(dot(R, V), half(0.0));
+        half G1 = NV / (NV * (half(1.0) - k) + k);
+        half G2 = NdotL / (NdotL * (half(1.0) - k) + k);
+        half G  = G1 * G2;
+
+        half NL_clamped = max(dot(R, L), half(0.001));
+        half NV_clamped = max(dot(R, V), half(0.001));
+
+        //Spec = (NDF * G * Fo.x) / (4 * N.V * N.L)
+        half spec = (NDF * G * Fcol.x) * (oneOverFour / (NV_clamped * NL_clamped));
+
+        // accumulate
+        half3 C = u_perPFrame.u_lightColors[i];
+        totalLight += C * (NdotL * attenuation + spec * attenuation);
+
+        //half NdotL = max(dot(transformedNormal, L), (half)0.0);
+        //if (NdotL > 0.0)
+        //{
+        //    half3 lightColor = u_perPFrame.u_lightColors[i];
+        //    lightColor *= attenuation;
 
             // Fresnel-Schlick approximation for reflectance
-            half3 F = fresnelSchlick(u_F0, H, V);
-            half NDF = distributionGGX(transformedNormal, H, roughness);
-            half G = geometrySmith(transformedNormal, V, L, roughness);
+        //    half3 F = fresnelSchlick(u_F0, H, V);
+        //    half NDF = distributionGGX(transformedNormal, H, roughness);
+        //    half G = geometrySmith(transformedNormal, V, L, roughness);
 
             // Specular term
-            half3 numerator = NDF * G * F;
-            half denominator = 4.0 * max(dot(transformedNormal, V), 0.001) * max(dot(transformedNormal, L), 0.001);
-            half3 specular = numerator / denominator;
+        //    half3 numerator = NDF * G * F;
+        //    half denominator = 4.0 * max(dot(transformedNormal, V), 0.001) * max(dot(transformedNormal, L), 0.001);
+        //    half3 specular = numerator / denominator;
 
             // kS is the Fresnel reflectance, kD is the diffuse component
-            half3 kS = F;
-            half3 kD = 1.0 - kS;
-            kD *= 1.0 - metallic; // Will be 1.0 since metallic is 0
+        //    half3 kS = F;
+        //    half3 kD = 1.0 - kS;
+        //    kD *= 1.0 - metallic; // Will be 1.0 since metallic is 0
 
             // Lambertian diffuse
-            half3 diffuse = kD * albedo / pi;
+        //    half3 diffuse = kD * albedo / pi;
 
             // Accumulate light contribution
-            totalLight += (diffuse + specular) * NdotL * lightColor;
-        }
+        //    totalLight += (diffuse + specular) * NdotL * lightColor;
+        //}
     }
     
-    // Apply ambient occlusion (hardcoded to 1.0)
-    half3 ambientContribution = ambient * albedo * ao;
-    totalLight += ambientContribution;
-
-    // Final color (no emissive in simplified version)
-    half3 finalColor = totalLight;
-
-    // Simple gamma correction
-    //finalColor = pow(finalColor, float3(1.0 / 2.2));
-    //much faster
-    finalColor = sqrt(finalColor);
-    
-    out_color = float4(finalColor, 1.0);
+    // Gama-correct and modulate
+    half3 colorOut = sqrt(saturate(totalLight)) * albedo;
+    out_color = half4(colorOut, 1.0);
 }
