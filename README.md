@@ -1,6 +1,7 @@
 # Vita Final Renderer
+![Capture](https://github.com/user-attachments/assets/d398914a-6cc6-4a57-a51d-7bd762968198)
 
-This project targets the PlayStation Vita and uses the VitaSDK toolchain.
+This project is an attempt at real-time physically based lighting on the PlayStation Vita and uses the open-source VitaSDK toolchain.
 
 ## Prerequisites
 - [VitaSDK](https://vitasdk.org/) installed.
