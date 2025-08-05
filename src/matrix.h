@@ -48,8 +48,16 @@ public:
 		float m20 = matrix[8], m21 = matrix[9], m22 = matrix[10], m23 = matrix[11];
 		float m30 = matrix[12], m31 = matrix[13], m32 = matrix[14], m33 = matrix[15];
 
-		alignas(16) float r[16];
-		std::memcpy(r, rhs.matrix, 16 * sizeof(float));
+		// Avoid copying when multiplying by a different matrix. If this
+		// matrix is also the right-hand side, use a temporary buffer to
+		// prevent overwriting values that are still needed.
+		const float* r = rhs.matrix;
+		alignas(16) float temp[16];
+		if (this == &rhs)
+		{
+			std::memcpy(temp, rhs.matrix, 16 * sizeof(float));
+			r = temp;
+		}
 
 		//Row 0
 		matrix[0] = m00 * r[0] + m01 * r[4] + m02 * r[8] + m03 * r[12];
@@ -136,22 +144,14 @@ inline Matrix4x4 operator*(const Matrix4x4& lhs, const float& rhs)
 	return tempMatrix;
 }
 
-inline Vector4f operator*(const Matrix4x4 lhs, const Vector4f& rhs)
+inline Vector3f operator*(const Matrix4x4& mat, const Vector3f vec)
 {
-	// Since matrix is stored in row-major order:
-	// Row 0: matrix[0], matrix[1], matrix[2], matrix[3]
-	// Row 1: matrix[4], matrix[5], matrix[6], matrix[7]
-	// Row 2: matrix[8], matrix[9], matrix[10], matrix[11]
-	// Row 3: matrix[12], matrix[13], matrix[14], matrix[15]
+	// w = 1.0f for perspective transformations
+	float x = mat.getData()[0] * vec.x + mat.getData()[1] * vec.y + mat.getData()[2] * vec.z + mat.getData()[3];
+	float y = mat.getData()[4] * vec.x + mat.getData()[5] * vec.y + mat.getData()[6] * vec.z + mat.getData()[7];
+	float z = mat.getData()[8] * vec.x + mat.getData()[9] * vec.y + mat.getData()[10] * vec.z + mat.getData()[11];
 
-	const float* m = lhs.getData();
-
-	return Vector4f(
-		m[0] * rhs.x + m[1] * rhs.y + m[2] * rhs.z + m[3] * rhs.w,    // Row 0 dot Vector
-		m[4] * rhs.x + m[5] * rhs.y + m[6] * rhs.z + m[7] * rhs.w,    // Row 1 dot Vector
-		m[8] * rhs.x + m[9] * rhs.y + m[10] * rhs.z + m[11] * rhs.w,  // Row 2 dot Vector
-		m[12] * rhs.x + m[13] * rhs.y + m[14] * rhs.z + m[15] * rhs.w  // Row 3 dot Vector
-	);
+	return Vector3f(x, y, z);
 }
 
 Matrix4x4 createTransformationMatrix(Vector3f translation, Vector3f rotation, Vector3f scale);
