@@ -3,7 +3,7 @@ float4 main(
 	float2 texCoord,
 
 	uniform float u_alpha,
-    uniform float4x4 u_transform,
+    uniform row_major float4x4 u_transform,
 
 	out half2 pass_texCoord: TEXCOORD0_HALF,
 	out half pass_alpha : COLOR) : POSITION

@@ -2,9 +2,9 @@ float4 main(
 	float3 position,
 	float2 texCoord,
 
-	uniform float4x4 u_modelMatrix,
-	uniform float4x4 u_viewMatrix,
-	uniform float4x4 u_projectionMatrix,
+	uniform row_major float4x4 u_modelMatrix,
+	uniform row_major float4x4 u_viewMatrix,
+	uniform row_major float4x4 u_projectionMatrix,
 
 	out half2 pass_texCoord: TEXCOORD0_HALF) : POSITION
 {
