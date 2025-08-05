@@ -1780,7 +1780,7 @@ int main()
 	Vector3f cameraPosition = { 0.0f, 1.0f, 0.0f };
 	Vector3f cameraRotation = { 0.0f, 0.0f, 0.0f };
 	//params: position, rotation, fov, aspect ratio, near plane, far plane
-	Camera camera = Camera(CameraType::PERSPECTIVE, cameraPosition, cameraRotation, 45.0f, (float)DISPLAY_WIDTH / (float)DISPLAY_HEIGHT, 0.1f, 100.0f);
+	Camera camera = Camera(CameraType::PERSPECTIVE, cameraPosition, cameraRotation, 45.0f, (float)DISPLAY_WIDTH / (float)DISPLAY_HEIGHT, 0.1f, 1000.0f);
 	Camera orthoCam(CameraType::ORTHOGRAPHIC, Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 0.0f, 0.0f), 0.0f, 1.0f, -1.0f, 1.0f);
 
 	//surface alpha

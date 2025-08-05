@@ -9,7 +9,7 @@ Camera::Camera()
 	this->fov = 45.0f;
 	this->aspectRatio = 16.0f / 9.0f;
 	this->nearPlane = 0.025f;
-	this->farPlane = 100.0f;
+	this->farPlane = 125.0f;
 
 	this->viewMatrix = createViewMatrix(position, rotation);
 	this->projectionMatrix = createProjectionMatrix(fov, aspectRatio, nearPlane, farPlane);
