@@ -1,0 +1,39 @@
+// Per frame uniforms are the same for all entities in the frame
+// These don't change between draw calls (only frame to frame))
+struct PerFrameVertexUniforms
+{
+	row_major float4x4 u_viewMatrix;
+	row_major float4x4 u_projectionMatrix;
+};
+PerFrameVertexUniforms u_perVFrame : BUFFER[0];
+
+half4 main(
+	float3 position : POSITION,
+	float2 texCoord : TEXCOORD0,
+	float3 normal : NORMAL,
+	
+	float4 i_m0 : TEXCOORD1, // instance matrix row 0
+	float4 i_m1 : TEXCOORD2, // instance matrix row 1
+	float4 i_m2 : TEXCOORD3, // instance matrix row 2
+	float4 i_m3 : TEXCOORD4, // instance matrix row 3
+
+	out half2 pass_texCoord : TEXCOORD0_HALF,
+	out half4 pass_surfaceNormal : TEXCOORD1_HALF,
+	out half4 pass_worldPosition : TEXCOORD2_HALF) : POSITION
+{
+	// Assemble the model matrix from per-instance attributes
+	row_major float4x4 modelMatrix = float4x4(i_m0, i_m1, i_m2, i_m3);
+
+	half4 worldPosition = mul(modelMatrix, float4(position, 1.0));
+	half4 clipPosition = mul(u_perVFrame.u_projectionMatrix, mul(u_perVFrame.u_viewMatrix, worldPosition));
+	
+	// Pass the texture coordinate to the fragment shader
+	pass_texCoord = texCoord;
+
+	//convert normal to worldspace and normalize it
+	pass_surfaceNormal = half4(normalize(mul((float3x3)modelMatrix, normal)), 1.0);
+
+	pass_worldPosition = worldPosition;
+
+	return clipPosition;
+}

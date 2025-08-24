@@ -140,6 +140,7 @@ extern unsigned char _binary_texturedScreenLiteral_v_gxp_start;
 extern unsigned char _binary_texturedScreenLiteral_f_gxp_start;
 extern unsigned char _binary_texturedLit_v_gxp_start;
 extern unsigned char _binary_texturedLit_f_gxp_start;
+extern unsigned char _binary_texturedLitInstanced_v_gxp_start;
 extern unsigned char _binary_terrain_v_gxp_start;
 extern unsigned char _binary_terrain_f_gxp_start;
 
@@ -153,6 +154,7 @@ static const SceGxmProgram* const gxmProgTexturedScreenLiteralVertexGxp = (SceGx
 static const SceGxmProgram* const gxmProgTexturedScreenLiteralFragmentGxp = (SceGxmProgram*)&_binary_texturedScreenLiteral_f_gxp_start;
 static const SceGxmProgram* const gxmProgTexturedLitVertexGxp = (SceGxmProgram*)&_binary_texturedLit_v_gxp_start;
 static const SceGxmProgram* const gxmProgTexturedLitFragmentGxp = (SceGxmProgram*)&_binary_texturedLit_f_gxp_start;
+static const SceGxmProgram* const gxmProgTexturedLitInstancedVertexGxp = (SceGxmProgram*)&_binary_texturedLitInstanced_v_gxp_start;
 static const SceGxmProgram* const gxmProgTerrainVertexGxp = (SceGxmProgram*)&_binary_terrain_v_gxp_start;
 static const SceGxmProgram* const gxmProgTerrainFragmentGxp = (SceGxmProgram*)&_binary_terrain_f_gxp_start;
 
@@ -215,6 +217,16 @@ static const SceGxmProgramParameter* gxmTexturedLitFragmentProgram_u_lightRadiiP
 static SceGxmVertexProgram* gxmTexturedLitVertexProgramPatched;
 static SceGxmFragmentProgram* gxmTexturedLitFragmentProgramPatched;
 
+static SceGxmShaderPatcherId gxmTexturedLitInstancedVertexProgramID;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_positionParam;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_texCoordParam;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_normalParam;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_i_m0Param;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_i_m1Param;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_i_m2Param;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_i_m3Param;
+static SceGxmVertexProgram* gxmTexturedLitInstancedVertexProgramPatched;
+
 static SceGxmShaderPatcherId gxmTerrainVertexProgramID;
 static SceGxmShaderPatcherId gxmTerrainFragmentProgramID;
 static const SceGxmProgramParameter* gxmTerrainVertexProgram_positionParam;
@@ -234,6 +246,11 @@ static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_lightRadiiParam
 static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_F0Param;
 static SceGxmVertexProgram* gxmTerrainVertexProgramPatched;
 static SceGxmFragmentProgram* gxmTerrainFragmentProgramPatched;
+
+struct InstanceData
+{
+	float modelMatrix[16];
+};
 
 //Used by Lit Textured Shader
 struct PerFrameVertexUniforms
@@ -277,10 +294,12 @@ SceUID perFrameVertexUniformBufferUID;
 SceUID perFrameFragmentUniformBufferUID;
 SceUID perFrameTerrainVertexUniformBufferUID;
 SceUID perFrameTerrainFragmentUniformBufferUID;
+SceUID instanceDataBufferUID;
 PerFrameVertexUniforms* perFrameVertexUniformBuffer;
 PerFrameFragmentUniforms* perFrameFragmentUniformBuffer;
 PerFrameTerrainVertexUniforms* perFrameTerrainVertexUniformBuffer;
 PerFrameTerrainFragmentUniforms* perFrameTerrainFragmentUniformBuffer;
+InstanceData* instanceDataBuffer;
 
 // Holds terrain chunk GPU data for each LOD
 struct ChunkGPUData
@@ -1043,7 +1062,7 @@ void createShaders()
 	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_perPFrame.u_lightColors", &gxmTexturedLitFragmentProgram_u_lightColorsParam);
 	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_perPFrame.u_lightPowers", &gxmTexturedLitFragmentProgram_u_lightPowersParam);
 	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_perPFrame.u_lightRadii", &gxmTexturedLitFragmentProgram_u_lightRadiiParam);
-	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_lightPositions", &gxmTexturedLitFragmentProgram_u_lightPositionsParam);
+	findGxmShaderUniformByName(texturedLitFragmentProgram, "u_perPFrame.u_lightPositions", &gxmTexturedLitFragmentProgram_u_lightPositionsParam);
 
 	sceClibPrintf("texturedLit PositionParam at address: %p\n", (void*)gxmTexturedLitVertexProgram_positionParam);
 	sceClibPrintf("texturedLit TexCoordParam at address: %p\n", (void*)gxmTexturedLitVertexProgram_texCoordParam);
@@ -1106,6 +1125,112 @@ void createShaders()
 	}
 
 	/*
+	*	TexturedLit Shader (Instanced)
+	*/
+
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTexturedLitInstancedVertexGxp, &gxmTexturedLitInstancedVertexProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(texturedLitInstancedVertexProgramGxp): 0x%08X\n", err);
+
+	const SceGxmProgram* texturedLitInstancedVertexProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTexturedLitInstancedVertexProgramID);
+
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "position", &gxmTexturedLitInstancedVertexProgram_positionParam);
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "texCoord", &gxmTexturedLitInstancedVertexProgram_texCoordParam);
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "normal", &gxmTexturedLitInstancedVertexProgram_normalParam);
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "i_m0", &gxmTexturedLitInstancedVertexProgram_i_m0Param);
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "i_m1", &gxmTexturedLitInstancedVertexProgram_i_m1Param);
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "i_m2", &gxmTexturedLitInstancedVertexProgram_i_m2Param);
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "i_m3", &gxmTexturedLitInstancedVertexProgram_i_m3Param);
+
+	sceClibPrintf("texturedLitInstanced PositionParam at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_positionParam);
+	sceClibPrintf("texturedLitInstanced TexCoordParam at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_texCoordParam);
+	sceClibPrintf("texturedLitInstanced NormalParam at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_normalParam);
+	sceClibPrintf("texturedLitInstanced i_m0Param at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_i_m0Param);
+	sceClibPrintf("texturedLitInstanced i_m1Param at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_i_m1Param);
+	sceClibPrintf("texturedLitInstanced i_m2Param at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_i_m2Param);
+	sceClibPrintf("texturedLitInstanced i_m3Param at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_i_m3Param);
+
+	SceGxmVertexAttribute texturedLitInstanced_vertex_attributes[7];
+	SceGxmVertexStream texturedLitInstanced_vertex_streams[2];
+
+	// Position, TexCoord, Normal (Per-Vertex Data)
+	texturedLitInstanced_vertex_attributes[0].streamIndex = 0;
+	texturedLitInstanced_vertex_attributes[0].offset = 0;
+	texturedLitInstanced_vertex_attributes[0].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLitInstanced_vertex_attributes[0].componentCount = 3;
+	texturedLitInstanced_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitInstancedVertexProgram_positionParam);
+
+	texturedLitInstanced_vertex_attributes[1].streamIndex = 0;
+	texturedLitInstanced_vertex_attributes[1].offset = offsetof(TexturedVertex, uv); //sizeof(vector3f);
+	texturedLitInstanced_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLitInstanced_vertex_attributes[1].componentCount = 2;
+	texturedLitInstanced_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitInstancedVertexProgram_texCoordParam);
+
+	texturedLitInstanced_vertex_attributes[2].streamIndex = 0;
+	texturedLitInstanced_vertex_attributes[2].offset = offsetof(TexturedVertex, normal); //sizeof(vector3f) + sizeof(vector2f);
+	texturedLitInstanced_vertex_attributes[2].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLitInstanced_vertex_attributes[2].componentCount = 3;
+	texturedLitInstanced_vertex_attributes[2].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitInstancedVertexProgram_normalParam);
+
+	// Per-Instance Matrix rows on stream 1
+	texturedLitInstanced_vertex_attributes[3].streamIndex = 1;
+	texturedLitInstanced_vertex_attributes[3].offset = 0; // row 0
+	texturedLitInstanced_vertex_attributes[3].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLitInstanced_vertex_attributes[3].componentCount = 4;
+	texturedLitInstanced_vertex_attributes[3].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitInstancedVertexProgram_i_m0Param);
+
+	texturedLitInstanced_vertex_attributes[4].streamIndex = 1;
+	texturedLitInstanced_vertex_attributes[4].offset = 16; // row 1 (4 floats * 4 bytes)
+	texturedLitInstanced_vertex_attributes[4].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLitInstanced_vertex_attributes[4].componentCount = 4;
+	texturedLitInstanced_vertex_attributes[4].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitInstancedVertexProgram_i_m1Param);
+
+	texturedLitInstanced_vertex_attributes[5].streamIndex = 1;
+	texturedLitInstanced_vertex_attributes[5].offset = 32; // row 2
+	texturedLitInstanced_vertex_attributes[5].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLitInstanced_vertex_attributes[5].componentCount = 4;
+	texturedLitInstanced_vertex_attributes[5].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitInstancedVertexProgram_i_m2Param);
+
+	texturedLitInstanced_vertex_attributes[6].streamIndex = 1;
+	texturedLitInstanced_vertex_attributes[6].offset = 48; // row 3
+	texturedLitInstanced_vertex_attributes[6].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	texturedLitInstanced_vertex_attributes[6].componentCount = 4;
+	texturedLitInstanced_vertex_attributes[6].regIndex = sceGxmProgramParameterGetResourceIndex(
+		gxmTexturedLitInstancedVertexProgram_i_m3Param);
+
+	// Stream 0: Per-Vertex Data (indexed by vertex index)
+	texturedLitInstanced_vertex_streams[0].stride = sizeof(struct TexturedVertex);
+	texturedLitInstanced_vertex_streams[0].indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
+
+	// Stream 1: Instance ID (automatically incremented)
+	texturedLitInstanced_vertex_streams[1].stride = sizeof(InstanceData); // 64 bytes (4x float4)
+	texturedLitInstanced_vertex_streams[1].indexSource = SCE_GXM_INDEX_SOURCE_INSTANCE_16BIT;
+
+	err = sceGxmShaderPatcherCreateVertexProgram(gxmShaderPatcher,
+		gxmTexturedLitInstancedVertexProgramID, 
+		texturedLitInstanced_vertex_attributes, 7, 
+		texturedLitInstanced_vertex_streams, 2, 
+		&gxmTexturedLitInstancedVertexProgramPatched);
+
+	if (err == 0)
+	{
+		sceClibPrintf("texturedLitInstanced VertexProgram created at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("texturedLitInstanced VertexProgram creation failed\n");
+	}
+
+	// Re-use the same fragment program as non-instanced version
+	//...
+
+	/*
 	*	Terrain Shader
 	*/
 	
@@ -1122,11 +1247,11 @@ void createShaders()
 
 	/*
 	static const SceGxmProgramParameter* gxmTerrainVertexProgram_positionParam;
-static const SceGxmProgramParameter* gxmTeerrainVertexProgram_texCoordParam;
-static const SceGxmProgramParameter* gxmTerrainVertexProgram_normalParam;
-static const SceGxmProgramParameter* gxmTerrainVertexProgram_tangentParam;
-static const SceGxmProgramParameter* gxmTerrainVertexProgram_bitangentParam;
-*/
+	static const SceGxmProgramParameter* gxmTeerrainVertexProgram_texCoordParam;
+	static const SceGxmProgramParameter* gxmTerrainVertexProgram_normalParam;
+	static const SceGxmProgramParameter* gxmTerrainVertexProgram_tangentParam;
+	static const SceGxmProgramParameter* gxmTerrainVertexProgram_bitangentParam;
+	*/
 
 	findGxmShaderAttributeByName(terrainVertexProgram, "in_position", &gxmTerrainVertexProgram_positionParam);
 	findGxmShaderAttributeByName(terrainVertexProgram, "in_texCoord", &gxmTerrainVertexProgram_texCoordParam);
@@ -1848,6 +1973,14 @@ int main()
 		_litCubes.push_back(newCube);
 	}
 
+	// Allocate instance data buffer
+	instanceDataBuffer = (InstanceData*)gpuAllocMap(
+		_litCubes.size() * sizeof(InstanceData),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+		SCE_GXM_MEMORY_ATTRIB_READ,
+		&instanceDataBufferUID
+	);
+
 	//create a few lights
 	Light firstLight = Light(Vector3f(0.0f, 2.0f, -7.0f), Color(1.0f, 0.0f, 0.0f, 1.0f));
 	Light secondLight = Light(Vector3f(-4.0f, 2.0f, -7.0f), Color(0.0f, 1.0f, 0.0f, 1.0f));
@@ -2185,13 +2318,19 @@ int main()
 		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, indexData, 36);
 
 		// render lit textured cubes
-		sceGxmSetVertexProgram(gxmContext, gxmTexturedLitVertexProgramPatched);
+		sceGxmSetVertexProgram(gxmContext, gxmTexturedLitInstancedVertexProgramPatched);
 		sceGxmSetFragmentProgram(gxmContext, gxmTexturedLitFragmentProgramPatched);
 
 		//populate per-frame uniform data
 		memcpy(perFrameVertexUniformBuffer->viewMatrix, camera.getViewMatrix().getData(), sizeof(float) * 16);
 		memcpy(perFrameVertexUniformBuffer->projectionMatrix, camera.getProjectionMatrix().getData(), sizeof(float) * 16);
-
+		// Update instance data buffer with model matrices
+		for (int i = 0; i < _litCubes.size(); i++) 
+		{
+			memcpy(instanceDataBuffer[i].modelMatrix,
+				_litCubes[i].modelMatrix.getData(),
+				sizeof(float) * 16);
+		}
 
 		perFrameFragmentUniformBuffer->lightCount = 3;
 		for (int i = 0; i < 3; i++)
@@ -2232,21 +2371,33 @@ int main()
 		sceGxmSetVertexUniformBuffer(gxmContext, perFrameVertexContainer, perFrameVertexUniformBuffer);
 		sceGxmSetFragmentUniformBuffer(gxmContext, perFrameFragmentContainer, perFrameFragmentUniformBuffer);
 
+		//set texture
 		sceGxmSetFragmentTexture(gxmContext, 0, &allWhiteTexture);
+
+		//set vertex streams
 		sceGxmSetVertexStream(gxmContext, 0, ltVertexData);
+		sceGxmSetVertexStream(gxmContext, 1, instanceDataBuffer);
 
 		//draw the cubes
-		for (int i = 0; i < _litCubes.size(); i++)
-		{
-			LitCube& cube = _litCubes[i];
+		// TO DO: Change to instanced rendering
+		//for (int i = 0; i < _litCubes.size(); i++)
+		//{
+		//	LitCube& cube = _litCubes[i];
 
-			void* litCubeDefaultVUniformBuffer;
-			sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &litCubeDefaultVUniformBuffer);
+		//	void* litCubeDefaultVUniformBuffer;
+		//	sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &litCubeDefaultVUniformBuffer);
 
-			sceGxmSetUniformDataF(litCubeDefaultVUniformBuffer, gxmTexturedLitVertexProgram_u_modelMatrixParam, 0, 16, (float*)cube.modelMatrix.getData());
+		//	sceGxmSetUniformDataF(litCubeDefaultVUniformBuffer, gxmTexturedLitVertexProgram_u_modelMatrixParam, 0, 16, (float*)cube.modelMatrix.getData());
 
-			sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, texturedIndexData, 36);
-		}
+		//	sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, texturedIndexData, 36);
+		//}
+
+		sceGxmDrawInstanced(gxmContext, 
+			SCE_GXM_PRIMITIVE_TRIANGLES, 
+			SCE_GXM_INDEX_FORMAT_U16, 
+			texturedIndexData, // Index buffer for one cube
+			36 * _litCubes.size(), // Total number of indices to render
+			36); // Index wrap count (restart after 36 indices, i.e. one cube)
 
 		// render textured cube
 		sceGxmSetVertexProgram(gxmContext, gxmTexturedVertexProgramPatched);
