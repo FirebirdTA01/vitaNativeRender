@@ -225,6 +225,8 @@ static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_i_m0Pa
 static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_i_m1Param;
 static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_i_m2Param;
 static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_i_m3Param;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_u_viewMatrixParam;
+static const SceGxmProgramParameter* gxmTexturedLitInstancedVertexProgram_u_projectionMatrixParam;
 static SceGxmVertexProgram* gxmTexturedLitInstancedVertexProgramPatched;
 
 static SceGxmShaderPatcherId gxmTerrainVertexProgramID;
@@ -1141,6 +1143,8 @@ void createShaders()
 	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "i_m1", &gxmTexturedLitInstancedVertexProgram_i_m1Param);
 	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "i_m2", &gxmTexturedLitInstancedVertexProgram_i_m2Param);
 	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "i_m3", &gxmTexturedLitInstancedVertexProgram_i_m3Param);
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "u_perVFrame.u_viewMatrix", &gxmTexturedLitInstancedVertexProgram_u_viewMatrixParam);
+	findGxmShaderAttributeByName(texturedLitInstancedVertexProgram, "u_perVFrame.u_projectionMatrix", &gxmTexturedLitInstancedVertexProgram_u_projectionMatrixParam);
 
 	sceClibPrintf("texturedLitInstanced PositionParam at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_positionParam);
 	sceClibPrintf("texturedLitInstanced TexCoordParam at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_texCoordParam);
@@ -1149,6 +1153,8 @@ void createShaders()
 	sceClibPrintf("texturedLitInstanced i_m1Param at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_i_m1Param);
 	sceClibPrintf("texturedLitInstanced i_m2Param at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_i_m2Param);
 	sceClibPrintf("texturedLitInstanced i_m3Param at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_i_m3Param);
+	sceClibPrintf("texturedLitInstanced ViewMatrixParam at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_u_viewMatrixParam);
+	sceClibPrintf("texturedLitInstanced ProjectionMatrixParam at address: %p\n", (void*)gxmTexturedLitInstancedVertexProgram_u_projectionMatrixParam);
 
 	SceGxmVertexAttribute texturedLitInstanced_vertex_attributes[7];
 	SceGxmVertexStream texturedLitInstanced_vertex_streams[2];
@@ -2002,6 +2008,7 @@ int main()
 	//verify the containers used for the lit cube uniform buffers
 	unsigned int perFrameVertexContainer = sceGxmProgramParameterGetContainerIndex(gxmTexturedLitVertexProgram_u_viewMatrixParam);
 	unsigned int perFrameFragmentContainer = sceGxmProgramParameterGetContainerIndex(gxmTexturedLitFragmentProgram_u_lightCountParam);
+	unsigned int perFrameVertexInstancedContainer = sceGxmProgramParameterGetContainerIndex(gxmTexturedLitInstancedVertexProgram_u_viewMatrixParam);
 	unsigned int perFrameTerrainVertexContainer = sceGxmProgramParameterGetContainerIndex(gxmTerrainVertexProgram_u_viewMatrixParam);
 	unsigned int perFrameTerrainFragmentContainer = sceGxmProgramParameterGetContainerIndex(gxmTerrainFragmentProgram_u_lightCountParam);
 	sceClibPrintf("Per-frame vertex container: %d\n", perFrameVertexContainer);
@@ -2368,7 +2375,7 @@ int main()
 		perFrameFragmentUniformBuffer->cameraPosition[2] = cameraPosition.z;
 		
 		//bind the per-frame uniform buffer (container 0 from BUFFER[0] in the shader)
-		sceGxmSetVertexUniformBuffer(gxmContext, perFrameVertexContainer, perFrameVertexUniformBuffer);
+		sceGxmSetVertexUniformBuffer(gxmContext, perFrameVertexInstancedContainer, perFrameVertexUniformBuffer);
 		sceGxmSetFragmentUniformBuffer(gxmContext, perFrameFragmentContainer, perFrameFragmentUniformBuffer);
 
 		//set texture
