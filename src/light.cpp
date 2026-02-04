@@ -40,22 +40,22 @@ void Light::setPower(float pow)
 	power = pow;
 }
 
-Color Light::getColor()
+Color Light::getColor() const
 {
 	return this->color;
 }
 
-Vector3f Light::getPosition()
+Vector3f Light::getPosition() const
 {
 	return this->position;
 }
 
-float Light::getRadius()
+float Light::getRadius() const
 {
 	return this->radius;
 }
 
-float Light::getPower()
+float Light::getPower() const
 {
 	return this->power;
 }

@@ -13,10 +13,10 @@ public:
 	void setPower(float power);
 
 
-	Color getColor();
-	Vector3f getPosition();
-	float getRadius();
-	float getPower();
+	Color getColor() const;
+	Vector3f getPosition() const;
+	float getRadius() const;
+	float getPower() const;
 
 private:
 	Color color;
