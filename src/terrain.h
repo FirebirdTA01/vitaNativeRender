@@ -61,7 +61,7 @@ public:
 		size_t indexCount;
 
 		//CPU-side data for generation (released after GPU upload)
-		std::vector<PBRVertex>* tempVertices;
+		std::vector<TerrainPBRVertex>* tempVertices;
 		std::vector<uint16_t>* tempIndices;
 	};
 

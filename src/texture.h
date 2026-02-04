@@ -11,6 +11,8 @@ public:
 
 	void bindMemory(void* addr, SceUID uid);
 	bool loadFromData(const unsigned char* base, int comp, bool isNormalMap = false);
+	// Load with component expansion (e.g., 3-component source -> 4-component GPU format)
+	bool loadFromDataExpanded(const unsigned char* base, int srcComp, int dstComp, unsigned char fillValue = 255, bool isNormalMap = false);
 	// Initialize the GXM texture object; returns SCE_OK on success or error code
 	int32_t init();
 	// Release GPU memory and unmap

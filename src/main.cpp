@@ -5,6 +5,7 @@
 #include <psp2/ctrl.h>
 #include <psp2/rtc.h>
 #include <vector>
+#include <algorithm>
 #include <stdlib.h> // For malloc, free
 #include <string.h> // For memcpy
 #include <random>
@@ -19,6 +20,7 @@
 #include "EMP_Logo.h"
 #include "EMP_Logo_Alpha.h"
 #include "terrainTextures.h"
+#include "benchmark.h"
 
 #define DISPLAY_WIDTH 960 // Default display width in pixels
 #define DISPLAY_HEIGHT 544 // Default display height in pixels
@@ -32,6 +34,7 @@
 
 static SceGxmMultisampleMode gxmMultisampleMode; //this is set later in initGxm
 static bool wireFrame = false;
+static BenchmarkState benchmarkState = {};
 
 //not used yet
 #define MAX_IDX_NUMBER 0xC000 // Maximum allowed number of indices per draw call for glDrawArrays
@@ -308,7 +311,7 @@ struct ChunkGPUData
 {
 	SceUID vertexUIDs[TerrainChunk::LOD_COUNT];
 	SceUID indexUIDs[TerrainChunk::LOD_COUNT];
-	PBRVertex* vertexPtrs[TerrainChunk::LOD_COUNT];
+	TerrainPBRVertex* vertexPtrs[TerrainChunk::LOD_COUNT];
 	uint16_t* indexPtrs[TerrainChunk::LOD_COUNT];
 };
 
@@ -1296,31 +1299,31 @@ void createShaders()
 	terrain_vertex_attributes[0].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxmTerrainVertexProgram_positionParam);
 	terrain_vertex_attributes[1].streamIndex = 0;
-	terrain_vertex_attributes[1].offset = offsetof(PBRVertex, uv); //sizeof(vector3f);
+	terrain_vertex_attributes[1].offset = offsetof(TerrainPBRVertex, u);
 	terrain_vertex_attributes[1].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
 	terrain_vertex_attributes[1].componentCount = 2;
 	terrain_vertex_attributes[1].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxmTerrainVertexProgram_texCoordParam);
 	terrain_vertex_attributes[2].streamIndex = 0;
-	terrain_vertex_attributes[2].offset = offsetof(PBRVertex, normal); //sizeof(vector3f) + sizeof(vector2f);
-	terrain_vertex_attributes[2].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	terrain_vertex_attributes[2].offset = offsetof(TerrainPBRVertex, nx);
+	terrain_vertex_attributes[2].format = SCE_GXM_ATTRIBUTE_FORMAT_S16N;  // Signed 16-bit normalized
 	terrain_vertex_attributes[2].componentCount = 3;
 	terrain_vertex_attributes[2].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxmTerrainVertexProgram_normalParam);
 	terrain_vertex_attributes[3].streamIndex = 0;
-	terrain_vertex_attributes[3].offset = offsetof(PBRVertex, tangent);
-	terrain_vertex_attributes[3].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	terrain_vertex_attributes[3].offset = offsetof(TerrainPBRVertex, tx);
+	terrain_vertex_attributes[3].format = SCE_GXM_ATTRIBUTE_FORMAT_S16N;  // Signed 16-bit normalized
 	terrain_vertex_attributes[3].componentCount = 3;
 	terrain_vertex_attributes[3].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxmTerrainVertexProgram_tangentParam);
 	terrain_vertex_attributes[4].streamIndex = 0;
-	terrain_vertex_attributes[4].offset = offsetof(PBRVertex, bitangent);
-	terrain_vertex_attributes[4].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+	terrain_vertex_attributes[4].offset = offsetof(TerrainPBRVertex, bx);
+	terrain_vertex_attributes[4].format = SCE_GXM_ATTRIBUTE_FORMAT_S16N;  // Signed 16-bit normalized
 	terrain_vertex_attributes[4].componentCount = 3;
 	terrain_vertex_attributes[4].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxmTerrainVertexProgram_bitangentParam);
 
-	terrain_vertex_stream.stride = sizeof(struct PBRVertex);
+	terrain_vertex_stream.stride = sizeof(struct TerrainPBRVertex);
 	terrain_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_32BIT;
 
 	err = sceGxmShaderPatcherCreateVertexProgram(gxmShaderPatcher,
@@ -1512,7 +1515,7 @@ int main()
 		1, 7, 3, 3, 7, 5
 	};
 
-	// Each face is defined in “face space” with its own 4 vertices:
+	// Each face is defined in ï¿½face spaceï¿½ with its own 4 vertices:
 	// UVs: bottom-left (0,0), bottom-right (1,0), top-right (1,1), top-left (0,1)
 	std::vector<UnlitTexturedVertex> texturedCubeVertices =
 	{
@@ -1529,7 +1532,7 @@ int main()
 		UnlitTexturedVertex(CUBE_HALF_SIZE,  CUBE_HALF_SIZE,  CUBE_HALF_SIZE, 0.0f, 1.0f - 1.0f), // 7: TL (front upper)
 
 		// Back face (z = -CUBE_HALF_SIZE)
-		// When viewed from the back the “local” bottom-left is (CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE)
+		// When viewed from the back the ï¿½localï¿½ bottom-left is (CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE)
 		UnlitTexturedVertex(CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 0.0f, 1.0f - 0.0f), // 8: BL
 		UnlitTexturedVertex(-CUBE_HALF_SIZE, -CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 0.0f), // 9: BR
 		UnlitTexturedVertex(-CUBE_HALF_SIZE,  CUBE_HALF_SIZE, -CUBE_HALF_SIZE, 1.0f, 1.0f - 1.0f), // 10: TR
@@ -1724,8 +1727,8 @@ int main()
 			sceClibPrintf("Chunk %d LOD %d: %d vertices, %d indices\n", chunkIndex, lod, lodMesh->vertexCount, lodMesh->indexCount);
 
 			// Allocate vertex data
-			gpuData.vertexPtrs[lod] = (PBRVertex*)gpuAllocMap(
-				lodMesh->vertexCount * sizeof(PBRVertex),
+			gpuData.vertexPtrs[lod] = (TerrainPBRVertex*)gpuAllocMap(
+				lodMesh->vertexCount * sizeof(TerrainPBRVertex),
 				SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
 				SCE_GXM_MEMORY_ATTRIB_READ,
 				&gpuData.vertexUIDs[lod]
@@ -1740,10 +1743,10 @@ int main()
 			);
 
 			// Copy data
-			memcpy(gpuData.vertexPtrs[lod], lodMesh->tempVertices->data(), lodMesh->vertexCount * sizeof(PBRVertex));
+			memcpy(gpuData.vertexPtrs[lod], lodMesh->tempVertices->data(), lodMesh->vertexCount * sizeof(TerrainPBRVertex));
 			memcpy(gpuData.indexPtrs[lod], lodMesh->tempIndices->data(), lodMesh->indexCount * sizeof(uint16_t));
 		}
-		
+
 		chunkIndex++;
 	}*/
 
@@ -2039,103 +2042,142 @@ int main()
 		float deltaTime = (float)(deltaTicks * 1000 / tickRes);
 
 		sceCtrlPeekBufferPositive(0, &ctrlData, 1);
-		if (ctrlData.buttons & SCE_CTRL_START)
-		{
-			running = false;
-		}
-		if (ctrlData.buttons & SCE_CTRL_TRIANGLE)
-		{
-			wireFrame = !wireFrame;
 
-			if (wireFrame)
+		// Benchmark flythrough: L + R + Start triggers it
+		if ((ctrlData.buttons & SCE_CTRL_LTRIGGER) &&
+			(ctrlData.buttons & SCE_CTRL_RTRIGGER) &&
+			(ctrlData.buttons & SCE_CTRL_START) &&
+			!benchmarkState.active)
+		{
+			sceClibPrintf("=== BENCHMARK FLYTHROUGH STARTED ===\n");
+			benchmarkInit(benchmarkState);
+			camera.setPosition(Vector3f(0.0f, 1.0f, 0.0f));
+			camera.setRotation(Vector3f(0.0f, 0.0f, 0.0f));
+			lightOneAngle = 0.0f;
+			lightTwoAngle = 0.0f;
+			lightThreeAngle = 0.0f;
+			colorCubeRotation = Vector3f(0.0f, 0.0f, 0.0f);
+			texturedCubeRotation = Vector3f(0.0f, 0.0f, 0.0f);
+			alphaCubeRotation = Vector3f(0.0f, 0.0f, 0.0f);
+			alpha = 0.0f;
+			alphaTimer = 0.0f;
+			increasing = true;
+		}
+
+		if (benchmarkState.active)
+		{
+			Vector3f benchPos, benchRot;
+			if (!benchmarkUpdate(benchmarkState, deltaTime, benchPos, benchRot))
 			{
-				sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
-				sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
+				benchmarkWriteLog(benchmarkState);
+			}
+			camera.setPosition(benchPos);
+			camera.setRotation(benchRot);
+			cameraPosition = benchPos;
+		}
+		else
+		{
+			if (ctrlData.buttons & SCE_CTRL_START)
+			{
+				running = false;
+			}
+			if (ctrlData.buttons & SCE_CTRL_TRIANGLE)
+			{
+				wireFrame = !wireFrame;
+
+				if (wireFrame)
+				{
+					sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
+					sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
+				}
+				else
+				{
+					sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
+					sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
+				}
+			}
+
+			double rx = (ctrlData.rx - 128.0) / 128.0;
+			double ry = (ctrlData.ry - 128.0) / 128.0;
+			double lx = (ctrlData.lx - 128.0) / 128.0;
+			double ly = (ctrlData.ly - 128.0) / 128.0;
+			const double deadzone = 0.25;
+			const double sensitivity = 0.005;
+
+			//Update the camera
+			Vector3f cameraMove = { 0.0f, 0.0f, 0.0f };
+			Vector3f cameraRot = { 0.0f, 0.0f, 0.0f };
+
+			if (abs(rx) < deadzone)
+			{
+				rx = 0.0;
 			}
 			else
 			{
-				sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
-				sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
+				cameraRot -= Vector3f(0.0f, (float)rx, 0.0f);
 			}
-		}
 
-		double rx = (ctrlData.rx - 128.0) / 128.0;
-		double ry = (ctrlData.ry - 128.0) / 128.0;
-		double lx = (ctrlData.lx - 128.0) / 128.0;
-		double ly = (ctrlData.ly - 128.0) / 128.0;
-		const double deadzone = 0.25;
-		const double sensitivity = 0.005;
+			if (abs(ry) < deadzone)
+			{
+				ry = 0.0;
+			}
+			else
+			{
+				cameraRot -= Vector3f((float)ry, 0.0f, 0.0f);
+			}
 
-		//Update the camera
-		Vector3f cameraMove = { 0.0f, 0.0f, 0.0f };
-		Vector3f cameraRot = { 0.0f, 0.0f, 0.0f };
+			if (abs(lx) < deadzone)
+			{
+				lx = 0.0;
+			}
+			else
+			{
+				cameraMove += camera.getRightVector() * lx;
+			}
 
-		if (abs(rx) < deadzone)
-		{
-			rx = 0.0;
-		}
-		else
-		{
-			cameraRot -= Vector3f(0.0f, (float)rx, 0.0f);
-		}
+			if (abs(ly) < deadzone)
+			{
+				ly = 0.0;
+			}
+			else
+			{
+				cameraMove -= camera.getForwardVector() * ly;
+			}
 
-		if (abs(ry) < deadzone)
-		{
-			ry = 0.0;
+			camera.varyPosition(cameraMove * sensitivity * deltaTime);
+			camera.varyRotation(cameraRot * sensitivity * deltaTime);
+			cameraPosition = camera.getPosition();
 		}
-		else
-		{
-			cameraRot -= Vector3f((float)ry, 0.0f, 0.0f);
-		}
-
-		if (abs(lx) < deadzone)
-		{
-			lx = 0.0;
-		}
-		else
-		{
-			cameraMove += camera.getRightVector() * lx;
-		}
-
-		if (abs(ly) < deadzone)
-		{
-			ly = 0.0;
-		}
-		else
-		{
-			cameraMove -= camera.getForwardVector() * ly;
-		}
-
-		camera.varyPosition(cameraMove * sensitivity * deltaTime);
-		camera.varyRotation(cameraRot * sensitivity * deltaTime);
-		cameraPosition = camera.getPosition();
 		
 
-		if (increasing)
+		if (!benchmarkState.active)
 		{
-			if (alphaTimer <= 4.0f)
+			if (increasing)
 			{
-				alphaTimer += 0.001f * deltaTime;
+				if (alphaTimer <= 4.0f)
+				{
+					alphaTimer += 0.001f * deltaTime;
+				}
+				else
+				{
+					alphaTimer = 4.0f;
+					alpha += 0.002f * deltaTime;
+				}
+				if (alpha > 1.0f)
+				{
+					alpha = 1.0f;
+					increasing = false;
+					alphaTimer = 0.0f;
+				}
 			}
 			else
 			{
-				alphaTimer = 4.0f;
-				alpha += 0.002f * deltaTime;
-			}
-			if (alpha > 1.0f)
-			{
-				alpha = 1.0f;
-				increasing = false;
-				alphaTimer = 0.0f;
-			}
-		}
-		else
-		{
-			alpha -= 0.004f * deltaTime;
-			if (alpha < 0.0f)
-			{
-				alpha = 0.0f;
-				increasing = true;
+				alpha -= 0.004f * deltaTime;
+				if (alpha < 0.0f)
+				{
+					alpha = 0.0f;
+					increasing = true;
+				}
 			}
 		}
 
@@ -2196,6 +2238,14 @@ int main()
 
 		// Get visible terrain chunks
 		std::vector<TerrainChunk*> visibleChunks = terrain.getVisibleChunks(viewProjMatrix);
+
+		// Sort front-to-back for better HSR on SGX543
+		std::sort(visibleChunks.begin(), visibleChunks.end(),
+			[&cameraPosition](const TerrainChunk* a, const TerrainChunk* b) {
+				Vector3f da = a->getCenter() - cameraPosition;
+				Vector3f db = b->getCenter() - cameraPosition;
+				return (da.x*da.x + da.y*da.y + da.z*da.z) < (db.x*db.x + db.y*db.y + db.z*db.z);
+			});
 
 		clearScreen();
 

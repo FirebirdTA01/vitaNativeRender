@@ -71,6 +71,31 @@ bool Texture::loadFromData(const unsigned char* base, int comp, bool isNormalMap
     return init() == SCE_OK;
 }
 
+bool Texture::loadFromDataExpanded(const unsigned char* base, int srcComp, int dstComp, unsigned char fillValue, bool isNormalMap)
+{
+    if (dstComp <= srcComp)
+    {
+        return loadFromData(base, srcComp, isNormalMap);
+    }
+
+    // Expand source data to destination component count
+    size_t pixelCount = (size_t)width * height;
+    unsigned char* expanded = (unsigned char*)malloc(pixelCount * dstComp);
+    if (!expanded) return false;
+
+    for (size_t i = 0; i < pixelCount; i++)
+    {
+        for (int c = 0; c < srcComp; c++)
+            expanded[i * dstComp + c] = base[i * srcComp + c];
+        for (int c = srcComp; c < dstComp; c++)
+            expanded[i * dstComp + c] = fillValue;
+    }
+
+    bool result = loadFromData(expanded, dstComp, isNormalMap);
+    free(expanded);
+    return result;
+}
+
 int32_t Texture::init()
 {
 	if (memAddr == nullptr)
@@ -81,7 +106,6 @@ int32_t Texture::init()
 
 	int32_t result = SCE_OK;
 
-	//TO DO: handle other types
 	switch (texType)
 	{
 	case SceGxmTextureType::SCE_GXM_TEXTURE_LINEAR:
@@ -96,6 +120,21 @@ int32_t Texture::init()
             width,
             height,
             mipCount - 1);
+		break;
+
+	case SceGxmTextureType::SCE_GXM_TEXTURE_SWIZZLED:
+        if (mipCount == 0)
+        {
+            sceClibPrintf("WARNING: Texture has 0 mipmaps, setting to 1\n");
+            mipCount = 1;
+        }
+
+        result = sceGxmTextureInitSwizzled(&texture, memAddr,
+            texFormat,
+            width,
+            height,
+            mipCount - 1);
+        sceClibPrintf("sceGxmTextureInitSwizzled(): 0x%08X\n", result);
 		break;
 
 	default:

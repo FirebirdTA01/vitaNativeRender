@@ -120,7 +120,7 @@ TerrainChunk::TerrainChunk(int chunkXin, int chunkZin, float chunkWorldSize, flo
 	for (int i = 0; i < LOD_COUNT; i++)
 	{
 		//generateLODMesh(LOD_VERTICES[i], lodMeshes[i]);
-		lodMeshes[i].tempVertices = new std::vector<PBRVertex>();
+		lodMeshes[i].tempVertices = new std::vector<TerrainPBRVertex>();
 		lodMeshes[i].tempIndices = new std::vector<uint16_t>();
 	}
 }
@@ -139,7 +139,7 @@ void TerrainChunk::initializeWithPool(TerrainBufferPool* pool)
 		generateLODMesh(LOD_VERTICES[i], lodMeshes[i]);
 
 		//Allocate GPU memory from pool
-		size_t vertexSize = lodMeshes[i].vertexCount * sizeof(PBRVertex);
+		size_t vertexSize = lodMeshes[i].vertexCount * sizeof(TerrainPBRVertex);
 		size_t indexSize = lodMeshes[i].indexCount * sizeof(uint16_t);
 
 		lodMeshes[i].vertexAlloc = bufferPool->allocateVertices(vertexSize);
@@ -159,7 +159,7 @@ void TerrainChunk::calculateMemoryRequirements(size_t& vertexSize, size_t& index
 		int gridSize = verticesPerSide - 1;
 		int indexCount = gridSize * gridSize * 6;
 
-		vertexSize += vertexCount * sizeof(PBRVertex);
+		vertexSize += vertexCount * sizeof(TerrainPBRVertex);
 		indexSize += indexCount * sizeof(uint16_t);
 	}
 }
@@ -176,7 +176,7 @@ void TerrainChunk::uploadToGPU()
 		{
 			memcpy(mesh.vertexAlloc.gpuData,
 				mesh.tempVertices->data(),
-				mesh.tempVertices->size() * sizeof(PBRVertex));
+				mesh.tempVertices->size() * sizeof(TerrainPBRVertex));
 		}
 
 		// Copy index data to GPU
@@ -224,7 +224,7 @@ TerrainChunk::LODLevel TerrainChunk::calculateLOD(const Vector3f& cameraPos, con
 	const float horizontalRampHeight = 25.0f; // ramp fully over this height
 	const float maxHorizontalHeightBoost = 3.0f;
 
-	// how far into the ramp we are [0…1]
+	// how far into the ramp we are [0ï¿½1]
 	float hb = std::clamp((heightAbove - horizontalMinHeight) / horizontalRampHeight, 0.0f, 1.0f);
 	float horizontalBoost = 1.0f + hb * (maxHorizontalHeightBoost - 1.0f);
 
@@ -377,7 +377,7 @@ bool TerrainChunk::isInFrustum(const Matrix4x4& viewProjMatrix) const
 			+ planes[i].c * center.z
 			+ planes[i].d;
 
-		// if the entire sphere is “behind” this plane, cull it
+		// if the entire sphere is ï¿½behindï¿½ this plane, cull it
 		if (dist < -boundingRadius)
 			return false;
 	}
@@ -400,7 +400,9 @@ void TerrainChunk::generateLODMesh(int verticesPerSide, LODMesh& lodMesh)
 	float vertexSpacing = chunkSize / static_cast<float>(gridSize);
 	// Y is up and grid is on XZ plane
 	Vector3f normal = { 0.0f, 1.0f, 0.0f };
-	// Tangents and bitangents are set in PBRVertex constructor
+	// Tangent and bitangent for flat terrain (will vary with heightmaps)
+	Vector3f tangent = { 1.0f, 0.0f, 0.0f };
+	Vector3f bitangent = { 0.0f, 0.0f, 1.0f };
 	// For correct tiling of texture
 	float uvScale = Terrain::TEXTURE_TILE_COUNT / Terrain::TERRAIN_SIZE;
 
@@ -420,7 +422,7 @@ void TerrainChunk::generateLODMesh(int verticesPerSide, LODMesh& lodMesh)
 			uv.x = ((chunkX * chunkSize) + (x * vertexSpacing)) * uvScale;
 			uv.y = ((chunkZ * chunkSize) + (z * vertexSpacing)) * uvScale;
 
-			PBRVertex vertex(pos, uv, normal);
+			TerrainPBRVertex vertex(pos, uv, normal, tangent, bitangent);
 			lodMesh.tempVertices->push_back(vertex);
 		}
 	}
