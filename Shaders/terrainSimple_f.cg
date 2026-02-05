@@ -1,0 +1,65 @@
+// Simplified terrain fragment shader for distant chunks (LOD_2+)
+// Single diffuse texture, simple N.L + ambient lighting, no normal/roughness maps
+
+#pragma argument (O4; fastmath; fastprecision; fastint)
+#pragma branch (flatten: default)
+#pragma loop (unroll: default)
+
+struct UniformBufferFragmentLightingSimple
+{
+    unsigned int u_lightCount;
+    float3 u_lightPositions[8];
+    float3 u_lightColors[8];
+    float u_lightPowers[8];
+    float u_lightRadii[8];
+};
+UniformBufferFragmentLightingSimple u_perPFrame : BUFFER[0];
+
+static const half INV_PI = 0.31830988618;
+
+void main(
+    half2 pass_texCoord : TEXCOORD0_HALF,
+    half2 pass_blendMapTexCoord : TEXCOORD1_HALF,
+    half4 pass_surfaceNormal : TEXCOORD2_HALF,
+    half4 pass_worldPosition : TEXCOORD3_HALF,
+    half4 pass_surfaceToViewVector : TEXCOORD4_HALF,
+
+    uniform sampler2D u_diffuseMap : TEXUNIT0,
+
+    uniform half3 u_F0, // kept for interface compatibility
+
+    out half4 out_color : COLOR)
+{
+    half3 N = normalize(pass_surfaceNormal.xyz);
+    half3 albedo = tex2D(u_diffuseMap, pass_texCoord).rgb;
+
+    // Simple ambient
+    half3 totalLight = half3(0.1, 0.1, 0.1);
+
+    // Simple Lambertian diffuse for each light
+    for (unsigned int i = 0; i < u_perPFrame.u_lightCount; i++)
+    {
+        half3 surfaceToLight = u_perPFrame.u_lightPositions[i] - pass_worldPosition.xyz;
+        half distSq = dot(surfaceToLight, surfaceToLight);
+        half radius = half(u_perPFrame.u_lightRadii[i]);
+
+        if (distSq > radius * radius)
+            continue;
+
+        half invD = rsqrt(distSq);
+        half3 L = surfaceToLight * invD;
+        half NdotL = max(dot(N, L), half(0.0));
+
+        half dist = distSq * invD;
+        half attenuation = u_perPFrame.u_lightPowers[i]
+            * (half(1.0) - dist / radius)
+            * INV_PI
+            / distSq;
+
+        half3 C = u_perPFrame.u_lightColors[i];
+        totalLight += C * NdotL * attenuation;
+    }
+
+    half3 colorOut = sqrt(saturate(totalLight)) * albedo;
+    out_color = half4(colorOut, 1.0);
+}
