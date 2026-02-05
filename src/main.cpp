@@ -155,6 +155,7 @@ extern unsigned char _binary_texturedLit_f_gxp_start;
 extern unsigned char _binary_texturedLitInstanced_v_gxp_start;
 extern unsigned char _binary_terrain_v_gxp_start;
 extern unsigned char _binary_terrain_f_gxp_start;
+extern unsigned char _binary_terrainSimple_f_gxp_start;
 
 static const SceGxmProgram* const gxmProgClearVertexGxp = (SceGxmProgram*)&_binary_clear_v_gxp_start;
 static const SceGxmProgram* const gxmProgClearFragmentGxp = (SceGxmProgram*)&_binary_clear_f_gxp_start;
@@ -169,6 +170,7 @@ static const SceGxmProgram* const gxmProgTexturedLitFragmentGxp = (SceGxmProgram
 static const SceGxmProgram* const gxmProgTexturedLitInstancedVertexGxp = (SceGxmProgram*)&_binary_texturedLitInstanced_v_gxp_start;
 static const SceGxmProgram* const gxmProgTerrainVertexGxp = (SceGxmProgram*)&_binary_terrain_v_gxp_start;
 static const SceGxmProgram* const gxmProgTerrainFragmentGxp = (SceGxmProgram*)&_binary_terrain_f_gxp_start;
+static const SceGxmProgram* const gxmProgTerrainSimpleFragmentGxp = (SceGxmProgram*)&_binary_terrainSimple_f_gxp_start;
 
 static SceGxmShaderPatcherId gxmClearVertexProgramID;
 static SceGxmShaderPatcherId gxmClearFragmentProgramID;
@@ -266,6 +268,11 @@ static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_lightRadiiParam
 static const SceGxmProgramParameter* gxmTerrainFragmentProgram_u_F0Param;
 static SceGxmVertexProgram* gxmTerrainVertexProgramPatched;
 static SceGxmFragmentProgram* gxmTerrainFragmentProgramPatched;
+
+// Simple terrain fragment shader (for distant LOD chunks)
+static SceGxmShaderPatcherId gxmTerrainSimpleFragmentProgramID;
+static const SceGxmProgramParameter* gxmTerrainSimpleFragmentProgram_u_F0Param;
+static SceGxmFragmentProgram* gxmTerrainSimpleFragmentProgramPatched;
 
 struct InstanceData
 {
@@ -670,6 +677,7 @@ void reinitDisplaySurfaces(SceGxmMultisampleMode newMode)
 	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTexturedScreenLiteralFragmentProgramPatched);
 	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTexturedLitFragmentProgramPatched);
 	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTerrainFragmentProgramPatched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTerrainSimpleFragmentProgramPatched);
 
 	// Blend info for textured shader
 	SceGxmBlendInfo blendInfo;
@@ -694,6 +702,8 @@ void reinitDisplaySurfaces(SceGxmMultisampleMode newMode)
 		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, NULL, texturedLitVertexProgram, &gxmTexturedLitFragmentProgramPatched);
 	sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher, gxmTerrainFragmentProgramID,
 		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, NULL, terrainVertexProgram, &gxmTerrainFragmentProgramPatched);
+	sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher, gxmTerrainSimpleFragmentProgramID,
+		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, NULL, terrainVertexProgram, &gxmTerrainSimpleFragmentProgramPatched);
 
 	// Reset buffer indices
 	gxmFrontBufferIndex = DISPLAY_BUFFER_COUNT - 1;
@@ -1464,6 +1474,31 @@ void createShaders()
 		sceClibPrintf("Terrain FragmentProgram creation failed\n");
 	}
 
+	/*
+	*	Simple Terrain Fragment Shader (for distant LOD chunks)
+	*/
+	err = sceGxmShaderPatcherRegisterProgram(gxmShaderPatcher, gxmProgTerrainSimpleFragmentGxp, &gxmTerrainSimpleFragmentProgramID);
+	sceClibPrintf("sceGxmShaderPatcherRegisterProgram(terrainSimpleFragmentProgramGxp): 0x%08X\n", err);
+
+	const SceGxmProgram* terrainSimpleFragmentProgram =
+		sceGxmShaderPatcherGetProgramFromId(gxmTerrainSimpleFragmentProgramID);
+
+	findGxmShaderUniformByName(terrainSimpleFragmentProgram, "u_F0", &gxmTerrainSimpleFragmentProgram_u_F0Param);
+	sceClibPrintf("terrainSimple F0 at address: %p\n", (void*)gxmTerrainSimpleFragmentProgram_u_F0Param);
+
+	err = sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher,
+		gxmTerrainSimpleFragmentProgramID, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+		gxmMultisampleMode, NULL, terrainVertexProgram,
+		&gxmTerrainSimpleFragmentProgramPatched);
+	if (err == 0)
+	{
+		sceClibPrintf("TerrainSimple FragmentProgram created at address: %p\n", (void*)gxmTerrainSimpleFragmentProgramPatched);
+	}
+	else
+	{
+		sceClibPrintf("TerrainSimple FragmentProgram creation failed\n");
+	}
+
 	//Now allocate persistent memory for the per-frame uniforms used by the lit shader
 	initializeUniformBuffers();
 }
@@ -2045,24 +2080,27 @@ int main()
 
 	Texture terrainDiffuseTex, terrainRoughTex, terrainNormalTex;
 
-	terrainDiffuseTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
+	terrainDiffuseTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+	terrainDiffuseTex.setTextureType(SCE_GXM_TEXTURE_SWIZZLED);
 	terrainDiffuseTex.setSize(repeatingGravel_256_diffuse_width, repeatingGravel_256_diffuse_height);
 	terrainDiffuseTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainDiffuseTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
-	terrainRoughTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
+	terrainRoughTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+	terrainRoughTex.setTextureType(SCE_GXM_TEXTURE_SWIZZLED);
 	terrainRoughTex.setSize(repeatingGravel_256_roughness_width, repeatingGravel_256_roughness_height);
 	terrainRoughTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainRoughTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
-	terrainNormalTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR);
+	terrainNormalTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+	terrainNormalTex.setTextureType(SCE_GXM_TEXTURE_SWIZZLED);
 	terrainNormalTex.setSize(repeatingGravel_256_normal_width, repeatingGravel_256_normal_height);
 	terrainNormalTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainNormalTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
 
-	terrainDiffuseTex.loadFromData(repeatingGravel_256_diffuse_data, repeatingGravel_256_diffuse_comp);
-	terrainRoughTex.loadFromData(repeatingGravel_256_roughness_data, repeatingGravel_256_roughness_comp);
-	terrainNormalTex.loadFromData(repeatingGravel_256_normal_data, repeatingGravel_256_normal_comp, true);
+	terrainDiffuseTex.loadFromDataExpanded(repeatingGravel_256_diffuse_data, 3, 4, 255);
+	terrainRoughTex.loadFromDataExpanded(repeatingGravel_256_roughness_data, 3, 4, 255);
+	terrainNormalTex.loadFromDataExpanded(repeatingGravel_256_normal_data, 3, 4, 255, true);
 
 	//set model position and rotation
 	Vector3f colorCubePosition = { -0.8f, 1.0f, -2.5f };
@@ -2426,19 +2464,12 @@ int main()
 
 		//terrain first
 		sceGxmSetVertexProgram(gxmContext, gxmTerrainVertexProgramPatched);
-		sceGxmSetFragmentProgram(gxmContext, gxmTerrainFragmentProgramPatched);
 
 		void* terrainVertexDefaultBuffer;
 		sceGxmReserveVertexDefaultUniformBuffer(gxmContext, &terrainVertexDefaultBuffer);
 		sceGxmSetUniformDataF(terrainVertexDefaultBuffer, gxmTerrainVertexProgram_u_modelMatrixParam, 0, 16, (float*)terrain.getModelMatrix().getData());
 
-		void* terrainFragmentDefaultBuffer;
-		sceGxmReserveFragmentDefaultUniformBuffer(gxmContext, &terrainFragmentDefaultBuffer);
-		//Default F0 for non-metallic materials
-		float F0[3] = { 0.04f, 0.04f, 0.04f };
-		sceGxmSetUniformDataF(terrainFragmentDefaultBuffer, gxmTerrainFragmentProgram_u_F0Param, 0, 3, F0);
-
-		//populate per-frame uniform data
+		//populate per-frame uniform data (shared by both terrain shaders)
 		memcpy(perFrameTerrainVertexUniformBuffer->viewMatrix, camera.getViewMatrix().getData(), sizeof(float) * 16);
 		memcpy(perFrameTerrainVertexUniformBuffer->projectionMatrix, camera.getProjectionMatrix().getData(), sizeof(float) * 16);
 		perFrameTerrainVertexUniformBuffer->cameraPosition[0] = cameraPosition.x;
@@ -2476,54 +2507,69 @@ int main()
 			perFrameTerrainFragmentUniformBuffer->lightRadii[i] = 0.0f;
 		}
 
-		//bind the per-frame uniform buffer
+		//bind the per-frame uniform buffer (shared by both terrain fragment shaders - same BUFFER[0] layout)
 		sceGxmSetVertexUniformBuffer(gxmContext, perFrameTerrainVertexContainer, perFrameTerrainVertexUniformBuffer);
 		sceGxmSetFragmentUniformBuffer(gxmContext, perFrameTerrainFragmentContainer, perFrameTerrainFragmentUniformBuffer);
-
-		sceGxmSetFragmentTexture(gxmContext, 0, terrainDiffuseTex.getTexture());
-		sceGxmSetFragmentTexture(gxmContext, 1, terrainNormalTex.getTexture());
-		sceGxmSetFragmentTexture(gxmContext, 2, terrainRoughTex.getTexture());
 
 		//Get buffer pool base address (terrain meshes are pooled into common ALIGN'ed chunks)
 		void* vertexPoolBase = terrain.getBufferPool()->getVertexPoolBase();
 		void* indexPoolBase = terrain.getBufferPool()->getIndexPoolBase();
 
-		// Render the visible chunks
+		//Default F0 for non-metallic materials
+		float F0[3] = { 0.04f, 0.04f, 0.04f };
+
+		// LOD threshold: chunks at this LOD level or higher use the simple shader
+		const TerrainChunk::LODLevel SIMPLE_SHADER_LOD = TerrainChunk::LOD_2;
+
+		// Pass 1: Close chunks (LOD_0, LOD_1) — full PBR shader with 3 textures
+		sceGxmSetFragmentProgram(gxmContext, gxmTerrainFragmentProgramPatched);
+		{
+			void* terrainFragmentDefaultBuffer;
+			sceGxmReserveFragmentDefaultUniformBuffer(gxmContext, &terrainFragmentDefaultBuffer);
+			sceGxmSetUniformDataF(terrainFragmentDefaultBuffer, gxmTerrainFragmentProgram_u_F0Param, 0, 3, F0);
+		}
+		sceGxmSetFragmentTexture(gxmContext, 0, terrainDiffuseTex.getTexture());
+		sceGxmSetFragmentTexture(gxmContext, 1, terrainNormalTex.getTexture());
+		sceGxmSetFragmentTexture(gxmContext, 2, terrainRoughTex.getTexture());
+
 		int renderedChunks = 0;
+		bool hasSimpleChunks = false;
 		for (TerrainChunk* chunk : visibleChunks)
 		{
-			/*
-			// Find the chunk index (For GPU data lookup)
-			int chunkX = 0, chunkZ = 0;
-
-			int chunkIndex = 0;
-			for (const auto& c : terrain.getChunks())
+			if (chunk->getCurrentLOD() >= SIMPLE_SHADER_LOD)
 			{
-				if (c.get() == chunk) break;
-				chunkIndex++;
+				hasSimpleChunks = true;
+				continue;
 			}
 
-			ChunkGPUData& gpuData = chunkGPUData[chunkIndex];
-			TerrainChunk::LODLevel currentLOD = chunk->getCurrentLOD();
-			TerrainChunk::LODMesh* lodMesh = chunk->getCurrentLODMesh();
-			*/
-
-			// Use the pool instead of the above
-
 			const TerrainChunk::LODMesh* lodMesh = chunk->getCurrentLODMesh();
-
-			//Calculate acutal GPU addresses from pool + offset
 			void* vertexData = (uint8_t*)vertexPoolBase + lodMesh->vertexAlloc.offset;
 			void* indexData = (uint8_t*)indexPoolBase + lodMesh->indexAlloc.offset;
 
-			//Bind and render
-			//sceGxmSetVertexStream(gxmContext, 0, gpuData.vertexPtrs[currentLOD]);
 			sceGxmSetVertexStream(gxmContext, 0, vertexData);
-			//sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, 
-			//	gpuData.indexPtrs[currentLOD], lodMesh->indexCount);
 			sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, indexData, lodMesh->indexCount);
-
 			renderedChunks++;
+		}
+
+		// Pass 2: Distant chunks (LOD_2+) — simple Lambertian shader, 1 texture sample
+		if (hasSimpleChunks)
+		{
+			sceGxmSetFragmentProgram(gxmContext, gxmTerrainSimpleFragmentProgramPatched);
+			// TEXUNIT0 (diffuse) already bound from PBR pass
+
+			for (TerrainChunk* chunk : visibleChunks)
+			{
+				if (chunk->getCurrentLOD() < SIMPLE_SHADER_LOD)
+					continue;
+
+				const TerrainChunk::LODMesh* lodMesh = chunk->getCurrentLODMesh();
+				void* vertexData = (uint8_t*)vertexPoolBase + lodMesh->vertexAlloc.offset;
+				void* indexData = (uint8_t*)indexPoolBase + lodMesh->indexAlloc.offset;
+
+				sceGxmSetVertexStream(gxmContext, 0, vertexData);
+				sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, indexData, lodMesh->indexCount);
+				renderedChunks++;
+			}
 		}
 
 		//sceClibPrintf("Rendered %d/%d chunks\n", renderedChunks, Terrain::CHUNKS_PER_SIDE * Terrain::CHUNKS_PER_SIDE);
@@ -2766,6 +2812,11 @@ int main()
 	sceGxmShaderPatcherReleaseVertexProgram(gxmShaderPatcher, gxmBasicVertexProgramPatched);
 	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmBasicFragmentProgramPatched);
 
+	sceClibPrintf("Releasing terrain shader programs\n");
+	sceGxmShaderPatcherReleaseVertexProgram(gxmShaderPatcher, gxmTerrainVertexProgramPatched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTerrainFragmentProgramPatched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTerrainSimpleFragmentProgramPatched);
+
 	sceClibPrintf("Unregistering clear shader programs\n");
 	sceGxmShaderPatcherUnregisterProgram(gxmShaderPatcher, gxmClearVertexProgramID);
 	sceGxmShaderPatcherUnregisterProgram(gxmShaderPatcher, gxmClearFragmentProgramID);
@@ -2773,6 +2824,11 @@ int main()
 	sceClibPrintf("Unregistering basic shader programs\n");
 	sceGxmShaderPatcherUnregisterProgram(gxmShaderPatcher, gxmBasicVertexProgramID);
 	sceGxmShaderPatcherUnregisterProgram(gxmShaderPatcher, gxmBasicFragmentProgramID);
+
+	sceClibPrintf("Unregistering terrain shader programs\n");
+	sceGxmShaderPatcherUnregisterProgram(gxmShaderPatcher, gxmTerrainVertexProgramID);
+	sceGxmShaderPatcherUnregisterProgram(gxmShaderPatcher, gxmTerrainFragmentProgramID);
+	sceGxmShaderPatcherUnregisterProgram(gxmShaderPatcher, gxmTerrainSimpleFragmentProgramID);
 
 	sceClibPrintf("Destroying GXM Shader Patcher\n");
 	sceGxmShaderPatcherDestroy(gxmShaderPatcher);

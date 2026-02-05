@@ -1,8 +1,25 @@
 #include "texture.h"
 #include "memory.h"
+#include <psp2/gxm.h>
 #include <psp2/kernel/clib.h>
 #include <math.h>
 #include <string.h> // For memcpy
+
+static SceGxmTransferFormat getTransferFormat(SceGxmTextureFormat texFmt)
+{
+    switch (texFmt)
+    {
+    case SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR:
+        return SCE_GXM_TRANSFER_FORMAT_U8U8U8U8_ABGR;
+    case SCE_GXM_TEXTURE_FORMAT_U8U8U8_BGR:
+        return SCE_GXM_TRANSFER_FORMAT_U8U8U8_BGR;
+    case SCE_GXM_TEXTURE_FORMAT_U8_R:
+        return SCE_GXM_TRANSFER_FORMAT_U8_R;
+    default:
+        sceClibPrintf("WARNING: getTransferFormat() - unhandled format 0x%08X, defaulting to U8U8U8U8_ABGR\n", texFmt);
+        return SCE_GXM_TRANSFER_FORMAT_U8U8U8U8_ABGR;
+    }
+}
 
 Texture::Texture()
 	: texType(SCE_GXM_TEXTURE_LINEAR),
@@ -53,6 +70,94 @@ bool Texture::loadFromData(const unsigned char* base, int comp, bool isNormalMap
     sceClibPrintf("Texture::loadFromData - Size: %dx%d, Components: %d, Mips: %u, Total size: %u bytes\n",
         width, height, comp, mips, (unsigned)dataSize);
 
+    if (texType == SCE_GXM_TEXTURE_SWIZZLED)
+    {
+        // Swizzled path: generate linear mipmaps in temp buffer, then hardware-transfer to swizzled layout
+        SceUID tempUid;
+        void* tempAddr = gpuAllocMap(dataSize,
+            SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+            SCE_GXM_MEMORY_ATTRIB_READ,
+            &tempUid);
+        if (!tempAddr)
+        {
+            sceClibPrintf("ERROR: Texture::loadFromData() failed to allocate temp GPU memory for swizzle\n");
+            return false;
+        }
+
+        generateMipmaps((unsigned char*)tempAddr, base, width, height, comp, mips, isNormalMap);
+
+        // The final buffer needs SCE_GXM_MEMORY_ATTRIB_RW (not just READ like normal textures).
+        // In the linear path, the CPU writes texture data and the GPU only reads it, so READ suffices.
+        // Here we use sceGxmTransferCopy() (PTLA) to hardware-convert linear->swizzled layout.
+        // The PTLA is part of the GPU, so it needs WRITE permission on the destination buffer.
+        // Without it, the GPU MMU denies the write and causes a hard GPU crash on real hardware.
+        // (The emulator doesn't enforce memory protection, so READ-only appears to work there.)
+        SceUID finalUid;
+        void* finalAddr = gpuAllocMap(dataSize,
+            SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+            SCE_GXM_MEMORY_ATTRIB_RW,
+            &finalUid);
+        if (!finalAddr)
+        {
+            sceClibPrintf("ERROR: Texture::loadFromData() failed to allocate final GPU memory for swizzle\n");
+            gpuFreeUnmap(tempUid);
+            return false;
+        }
+
+        SceGxmTransferFormat transferFmt = getTransferFormat(texFormat);
+
+        // Transfer each mip level from linear to swizzled
+        size_t offset = 0;
+        int levelW = width;
+        int levelH = height;
+
+        for (unsigned int level = 0; level < mips; ++level)
+        {
+            uint32_t levelStride = (uint32_t)(levelW * comp);
+
+            int32_t err = sceGxmTransferCopy(
+                levelW, levelH,
+                0,                              // colorKeyValue
+                0,                              // colorKeyMask
+                SCE_GXM_TRANSFER_COLORKEY_NONE,
+                transferFmt,
+                SCE_GXM_TRANSFER_LINEAR,
+                (void*)((unsigned char*)tempAddr + offset),
+                0, 0,                           // srcX, srcY
+                levelStride,                    // srcStride
+                transferFmt,
+                SCE_GXM_TRANSFER_SWIZZLED,
+                (void*)((unsigned char*)finalAddr + offset),
+                0, 0,                           // destX, destY
+                levelStride,                    // destStride
+                NULL,                           // syncObject
+                0,                              // syncFlags
+                NULL                            // notification
+            );
+
+            if (err != SCE_OK)
+            {
+                sceClibPrintf("ERROR: sceGxmTransferCopy mip %u (%dx%d) failed: 0x%08X\n",
+                    level, levelW, levelH, err);
+            }
+
+            size_t levelSize = (size_t)levelW * levelH * comp;
+            offset += ALIGN(levelSize, TEXTURE_ALIGNMENT);
+
+            if (levelW > 1) levelW /= 2;
+            if (levelH > 1) levelH /= 2;
+        }
+
+        sceGxmTransferFinish();
+
+        gpuFreeUnmap(tempUid);
+
+        bindMemory(finalAddr, finalUid);
+        setMipCount(mips);
+        return init() == SCE_OK;
+    }
+
+    // Linear path (original)
     SceUID uid;
     void* addr = gpuAllocMap(dataSize,
         SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
