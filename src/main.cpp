@@ -33,8 +33,17 @@
 #define DISPLAY_PIXEL_FORMAT SCE_DISPLAY_PIXELFORMAT_A8B8G8R8
 
 static SceGxmMultisampleMode gxmMultisampleMode; //this is set later in initGxm
+static int gxmMsaaModeIndex = 2; // Index into msaaModes array (0=None, 1=2X, 2=4X)
+static int gxmMsaaModeChangeRequested = -1; // -1 = no change, 0-2 = requested mode index
+static const SceGxmMultisampleMode msaaModes[] = {
+	SCE_GXM_MULTISAMPLE_NONE,
+	SCE_GXM_MULTISAMPLE_2X,
+	SCE_GXM_MULTISAMPLE_4X
+};
+static const char* msaaModeNames[] = { "None", "2X", "4X" };
 static bool wireFrame = false;
 static BenchmarkState benchmarkState = {};
+static uint32_t prevButtons = 0; // For edge detection on button presses
 
 //not used yet
 #define MAX_IDX_NUMBER 0xC000 // Maximum allowed number of indices per draw call for glDrawArrays
@@ -172,6 +181,12 @@ static struct ClearVertex* clearVerticesData;
 static unsigned short* clearIndicesData;
 static SceUID clearVerticesUID;
 static SceUID clearIndicesUID;
+
+// MSAA indicator quad (small colored square in top-right corner)
+static struct ClearVertex* msaaIndicatorVertices;
+static unsigned short* msaaIndicatorIndices;
+static SceUID msaaIndicatorVerticesUID;
+static SceUID msaaIndicatorIndicesUID;
 
 static SceGxmShaderPatcherId gxmBasicVertexProgramID;
 static SceGxmShaderPatcherId gxmBasicFragmentProgramID;
@@ -606,6 +621,87 @@ void initDepthStencilSurfaces()
 	sceClibPrintf("sceGxmDepthStencilSurfaceInit(): 0x%08X\n", err);
 }
 
+void reinitDisplaySurfaces(SceGxmMultisampleMode newMode)
+{
+	// Wait for GPU to finish all pending work
+	sceGxmFinish(gxmContext);
+	sceGxmDisplayQueueFinish();
+
+	// Wait for display hardware to finish scanning out from current buffers.
+	// Even after sceGxmDisplayQueueFinish(), the display controller may still
+	// be reading from the front buffer. Two vblank waits ensure the hardware
+	// has fully released all references to the old buffers and sync objects.
+	sceDisplayWaitVblankStart();
+	sceDisplayWaitVblankStart();
+
+	// Destroy old render target (needs recreating with new MSAA mode)
+	sceGxmDestroyRenderTarget(gxmRenderTarget);
+
+	// Free old depth-stencil surface (size changes with MSAA mode)
+	gpuFreeUnmap(gxmDepthStencilSurfaceUID);
+
+	// Now safe to free color surfaces and sync objects after vblank waits
+	for (int i = 0; i < DISPLAY_BUFFER_COUNT; i++)
+	{
+		gpuFreeUnmap(gxmColorSurfaceUIDs[i]);
+		sceGxmSyncObjectDestroy(gxmSyncObjs[i]);
+	}
+
+	// Update the MSAA mode
+	gxmMultisampleMode = newMode;
+
+	// Recreate everything with new mode
+	createRenderTarget();
+	initDisplayColorSurfaces();
+	initDepthStencilSurfaces();
+
+	// Re-patch all fragment programs with new MSAA mode
+	const SceGxmProgram* clearVertexProgram = sceGxmShaderPatcherGetProgramFromId(gxmClearVertexProgramID);
+	const SceGxmProgram* basicVertexProgram = sceGxmShaderPatcherGetProgramFromId(gxmBasicVertexProgramID);
+	const SceGxmProgram* texturedVertexProgram = sceGxmShaderPatcherGetProgramFromId(gxmTexturedVertexProgramID);
+	const SceGxmProgram* texturedScreenLiteralVertexProgram = sceGxmShaderPatcherGetProgramFromId(gxmTexturedScreenLiteralVertexProgramID);
+	const SceGxmProgram* texturedLitVertexProgram = sceGxmShaderPatcherGetProgramFromId(gxmTexturedLitVertexProgramID);
+	const SceGxmProgram* terrainVertexProgram = sceGxmShaderPatcherGetProgramFromId(gxmTerrainVertexProgramID);
+
+	// Release old fragment programs
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmClearFragmentProgramPatched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmBasicFragmentProgramPatched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTexturedFragmentProgramPatched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTexturedScreenLiteralFragmentProgramPatched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTexturedLitFragmentProgramPatched);
+	sceGxmShaderPatcherReleaseFragmentProgram(gxmShaderPatcher, gxmTerrainFragmentProgramPatched);
+
+	// Blend info for textured shader
+	SceGxmBlendInfo blendInfo;
+	blendInfo.colorMask = SCE_GXM_COLOR_MASK_ALL;
+	blendInfo.colorFunc = SCE_GXM_BLEND_FUNC_ADD;
+	blendInfo.alphaFunc = SCE_GXM_BLEND_FUNC_ADD;
+	blendInfo.colorSrc = SCE_GXM_BLEND_FACTOR_SRC_ALPHA;
+	blendInfo.colorDst = SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	blendInfo.alphaSrc = SCE_GXM_BLEND_FACTOR_SRC_ALPHA;
+	blendInfo.alphaDst = SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+
+	// Re-create fragment programs with new MSAA mode
+	sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher, gxmClearFragmentProgramID,
+		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, NULL, clearVertexProgram, &gxmClearFragmentProgramPatched);
+	sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher, gxmBasicFragmentProgramID,
+		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, NULL, basicVertexProgram, &gxmBasicFragmentProgramPatched);
+	sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher, gxmTexturedFragmentProgramID,
+		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, &blendInfo, texturedVertexProgram, &gxmTexturedFragmentProgramPatched);
+	sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher, gxmTexturedScreenLiteralFragmentProgramID,
+		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, &blendInfo, texturedScreenLiteralVertexProgram, &gxmTexturedScreenLiteralFragmentProgramPatched);
+	sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher, gxmTexturedLitFragmentProgramID,
+		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, NULL, texturedLitVertexProgram, &gxmTexturedLitFragmentProgramPatched);
+	sceGxmShaderPatcherCreateFragmentProgram(gxmShaderPatcher, gxmTerrainFragmentProgramID,
+		SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, newMode, NULL, terrainVertexProgram, &gxmTerrainFragmentProgramPatched);
+
+	// Reset buffer indices
+	gxmFrontBufferIndex = DISPLAY_BUFFER_COUNT - 1;
+	gxmBackBufferIndex = 0;
+
+	sceClibPrintf("MSAA mode changed to %s\n", msaaModeNames[gxmMsaaModeIndex]);
+}
+
 void initShaderPatcher()
 {
 	sceClibPrintf("Initializing shader patcher...\n");
@@ -836,6 +932,23 @@ void createShaders()
 	clearIndicesData[1] = 1;
 	clearIndicesData[2] = 2;
 	clearIndicesData[3] = 3;
+
+	// MSAA indicator quad - small colored square in top-right corner
+	msaaIndicatorVertices = (ClearVertex*)gpuAllocMap(4 * sizeof(struct ClearVertex),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ, &msaaIndicatorVerticesUID);
+	msaaIndicatorIndices = (unsigned short*)gpuAllocMap(4 * sizeof(unsigned short),
+		SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, SCE_GXM_MEMORY_ATTRIB_READ, &msaaIndicatorIndicesUID);
+
+	// Position in top-right corner (clip space: -1 to 1) - small ~3% indicator
+	msaaIndicatorVertices[0] = (ClearVertex){ 0.92f, 0.92f };  // bottom-left
+	msaaIndicatorVertices[1] = (ClearVertex){ 0.98f, 0.92f };  // bottom-right
+	msaaIndicatorVertices[2] = (ClearVertex){ 0.92f, 0.98f };  // top-left
+	msaaIndicatorVertices[3] = (ClearVertex){ 0.98f, 0.98f };  // top-right
+
+	msaaIndicatorIndices[0] = 0;
+	msaaIndicatorIndices[1] = 1;
+	msaaIndicatorIndices[2] = 2;
+	msaaIndicatorIndices[3] = 3;
 
 	/*
 	*   Basic Shader
@@ -1400,6 +1513,60 @@ void clearScreen()
 	}
 
 	//restore previous mode if necessary
+	if (wireFrame)
+	{
+		sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
+		sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
+	}
+}
+
+// Draw MSAA mode indicator - small colored quad in top-right corner
+// Red = No MSAA, Yellow = 2X MSAA, Green = 4X MSAA
+void drawMsaaIndicator()
+{
+	// Must be in FILL mode to draw the quad
+	sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
+	sceGxmSetBackPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_FILL);
+
+	// Disable depth testing so indicator draws on top of everything
+	sceGxmSetFrontDepthFunc(gxmContext, SCE_GXM_DEPTH_FUNC_ALWAYS);
+	sceGxmSetBackDepthFunc(gxmContext, SCE_GXM_DEPTH_FUNC_ALWAYS);
+	sceGxmSetFrontDepthWriteEnable(gxmContext, SCE_GXM_DEPTH_WRITE_DISABLED);
+	sceGxmSetBackDepthWriteEnable(gxmContext, SCE_GXM_DEPTH_WRITE_DISABLED);
+
+	sceGxmSetVertexProgram(gxmContext, gxmClearVertexProgramPatched);
+	sceGxmSetFragmentProgram(gxmContext, gxmClearFragmentProgramPatched);
+
+	// Set color based on MSAA mode: Red = None, Yellow = 2X, Green = 4X
+	float indicatorColor[4];
+	switch (gxmMsaaModeIndex)
+	{
+	case 0:  // No MSAA - Red
+		indicatorColor[0] = 1.0f; indicatorColor[1] = 0.2f; indicatorColor[2] = 0.2f; indicatorColor[3] = 1.0f;
+		break;
+	case 1:  // 2X MSAA - Yellow
+		indicatorColor[0] = 1.0f; indicatorColor[1] = 1.0f; indicatorColor[2] = 0.2f; indicatorColor[3] = 1.0f;
+		break;
+	case 2:  // 4X MSAA - Green
+	default:
+		indicatorColor[0] = 0.2f; indicatorColor[1] = 1.0f; indicatorColor[2] = 0.2f; indicatorColor[3] = 1.0f;
+		break;
+	}
+
+	void* fUniformBuffer = nullptr;
+	sceGxmReserveFragmentDefaultUniformBuffer(gxmContext, &fUniformBuffer);
+	sceGxmSetUniformDataF(fUniformBuffer, gxmClearFragmentProgram_u_clearColorParam, 0, 4, indicatorColor);
+
+	sceGxmSetVertexStream(gxmContext, 0, msaaIndicatorVertices);
+	sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, msaaIndicatorIndices, 4);
+
+	// Restore depth testing state
+	sceGxmSetFrontDepthFunc(gxmContext, SCE_GXM_DEPTH_FUNC_LESS_EQUAL);
+	sceGxmSetBackDepthFunc(gxmContext, SCE_GXM_DEPTH_FUNC_LESS_EQUAL);
+	sceGxmSetFrontDepthWriteEnable(gxmContext, SCE_GXM_DEPTH_WRITE_ENABLED);
+	sceGxmSetBackDepthWriteEnable(gxmContext, SCE_GXM_DEPTH_WRITE_ENABLED);
+
+	// Restore wireframe mode if it was enabled
 	if (wireFrame)
 	{
 		sceGxmSetFrontPolygonMode(gxmContext, SCE_GXM_POLYGON_MODE_TRIANGLE_LINE);
@@ -2097,6 +2264,12 @@ int main()
 				}
 			}
 
+			// SELECT button requests MSAA mode change (processed between frames)
+			if ((ctrlData.buttons & SCE_CTRL_SELECT) && !(prevButtons & SCE_CTRL_SELECT))
+			{
+				gxmMsaaModeChangeRequested = (gxmMsaaModeIndex + 1) % 3;
+			}
+
 			double rx = (ctrlData.rx - 128.0) / 128.0;
 			double ry = (ctrlData.ry - 128.0) / 128.0;
 			double lx = (ctrlData.lx - 128.0) / 128.0;
@@ -2533,7 +2706,26 @@ int main()
 
 		sceGxmDraw(gxmContext, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U32, surfaceIndexData, 6);
 
+		// Draw MSAA indicator (skip during benchmark to avoid skewing results)
+		if (!benchmarkState.active)
+		{
+			drawMsaaIndicator();
+		}
+
+		// Update previous button state for edge detection
+		prevButtons = ctrlData.buttons;
+
 		swapBuffers();
+
+		// Process deferred MSAA mode change between frames
+		// (after sceGxmEndScene/swap, before next sceGxmBeginScene)
+		if (gxmMsaaModeChangeRequested >= 0)
+		{
+			gxmMsaaModeIndex = gxmMsaaModeChangeRequested;
+			gxmMsaaModeChangeRequested = -1;
+			SceGxmMultisampleMode modes[] = { SCE_GXM_MULTISAMPLE_NONE, SCE_GXM_MULTISAMPLE_2X, SCE_GXM_MULTISAMPLE_4X };
+			reinitDisplaySurfaces(modes[gxmMsaaModeIndex]);
+		}
 	}
 
 	sceClibPrintf("Exiting...\n");
@@ -2553,6 +2745,11 @@ int main()
 	gpuFreeUnmap(clearVerticesUID);
 	sceClibPrintf("Freeing clear shader index data\n");
 	gpuFreeUnmap(clearIndicesUID);
+
+	sceClibPrintf("Freeing MSAA indicator vertex data\n");
+	gpuFreeUnmap(msaaIndicatorVerticesUID);
+	sceClibPrintf("Freeing MSAA indicator index data\n");
+	gpuFreeUnmap(msaaIndicatorIndicesUID);
 
 	sceClibPrintf("Freeing other model vertex and index data\n");
 	gpuFreeUnmap(colorCubeVertexDataUID);
