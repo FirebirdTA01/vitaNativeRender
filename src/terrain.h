@@ -39,6 +39,15 @@ private:
 	size_t currentIndexOffset;
 };
 
+// Pre-extracted frustum planes — extract once per frame, test against all chunks
+struct FrustumPlanes
+{
+	struct Plane { float a, b, c, d; };
+	Plane planes[6];
+
+	void extractFromMatrix(const Matrix4x4& viewProjMatrix);
+};
+
 class TerrainChunk
 {
 public:
@@ -95,8 +104,8 @@ public:
 	LODLevel getCurrentLOD() const;
 	void setCurrentLOD(LODLevel lod);
 
-	// Check if chunk is in frustum
-	bool isInFrustum(const Matrix4x4& viewProjMatrix) const;
+	// Check if chunk is in frustum (using pre-extracted planes)
+	bool isInFrustum(const FrustumPlanes& frustum) const;
 
 
 private:
@@ -136,8 +145,8 @@ public:
 	~Terrain();
 
 	bool initialize();
-	// Get chunks visible after frustum culling
-	std::vector<TerrainChunk*> getVisibleChunks(const Matrix4x4& viewProjMatrix);
+	// Get chunks visible after frustum culling, sorted front-to-back (returns reference to internal cache — no allocation)
+	const std::vector<TerrainChunk*>& getVisibleChunks(const Matrix4x4& viewProjMatrix, const Vector3f& cameraPos);
 	// Get all chunks (for initialization)
 	const std::vector<std::unique_ptr<TerrainChunk>>& getChunks() const;
 	// Get chunk at specified grid coordinate
@@ -157,6 +166,7 @@ private:
 	std::unique_ptr<TerrainBufferPool> bufferPool;
 	Matrix4x4 modelMatrix;
 	int visibleChunkCount;
+	std::vector<TerrainChunk*> visibleChunksCache; // reused each frame to avoid heap allocation
 
 	// Terrain position offset (for multiple terrain tiles) and to position the first tile centered at 0,0
 	Vector3f terrainOffset;

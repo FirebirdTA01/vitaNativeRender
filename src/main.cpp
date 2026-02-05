@@ -2438,16 +2438,8 @@ int main()
 		// incorporate the terrain's model transform into the cull test
 		Matrix4x4 viewProjMatrix = camera.getProjectionMatrix() * camera.getViewMatrix() * terrain.getModelMatrix();
 
-		// Get visible terrain chunks
-		std::vector<TerrainChunk*> visibleChunks = terrain.getVisibleChunks(viewProjMatrix);
-
-		// Sort front-to-back for better HSR on SGX543
-		std::sort(visibleChunks.begin(), visibleChunks.end(),
-			[&cameraPosition](const TerrainChunk* a, const TerrainChunk* b) {
-				Vector3f da = a->getCenter() - cameraPosition;
-				Vector3f db = b->getCenter() - cameraPosition;
-				return (da.x*da.x + da.y*da.y + da.z*da.z) < (db.x*db.x + db.y*db.y + db.z*db.z);
-			});
+		// Get visible terrain chunks, sorted front-to-back (returns const ref to internal cache — no heap allocation)
+		const std::vector<TerrainChunk*>& visibleChunks = terrain.getVisibleChunks(viewProjMatrix, cameraPosition);
 
 		clearScreen();
 
@@ -2483,20 +2475,7 @@ int main()
 			perFrameTerrainFragmentUniformBuffer->lightRadii[i] = lights[i].getRadius();
 		}
 
-		//fill in the rest of the 8 lights with all black and 0 power
-		for (int i = 3; i < 8; i++)
-		{
-			perFrameTerrainFragmentUniformBuffer->lightPositions[i][0] = 0.0f;
-			perFrameTerrainFragmentUniformBuffer->lightPositions[i][1] = 0.0f;
-			perFrameTerrainFragmentUniformBuffer->lightPositions[i][2] = 0.0f;
-			perFrameTerrainFragmentUniformBuffer->lightPositions[i][3] = 1.0f;
-			perFrameTerrainFragmentUniformBuffer->lightColors[i][0] = 0.0f;
-			perFrameTerrainFragmentUniformBuffer->lightColors[i][1] = 0.0f;
-			perFrameTerrainFragmentUniformBuffer->lightColors[i][2] = 0.0f;
-			perFrameTerrainFragmentUniformBuffer->lightColors[i][3] = 1.0f;
-			perFrameTerrainFragmentUniformBuffer->lightPowers[i] = 0.0f;
-			perFrameTerrainFragmentUniformBuffer->lightRadii[i] = 0.0f;
-		}
+		// Inactive lights (3-7) stay zero from pre-loop memset — no per-frame zeroing needed
 
 		//bind the per-frame uniform buffer (shared by both terrain fragment shaders - same BUFFER[0] layout)
 		sceGxmSetVertexUniformBuffer(gxmContext, perFrameTerrainVertexContainer, perFrameTerrainVertexUniformBuffer);
@@ -2615,20 +2594,7 @@ int main()
 			perFrameFragmentUniformBuffer->lightRadii[i] = lights[i].getRadius();
 		}
 
-		//fill in the rest of the 8 lights with all black and 0 power
-		for (int i = 3; i < 8; i++)
-		{
-			perFrameFragmentUniformBuffer->lightPositions[i][0] = 0.0f;
-			perFrameFragmentUniformBuffer->lightPositions[i][1] = 0.0f;
-			perFrameFragmentUniformBuffer->lightPositions[i][2] = 0.0f;
-			perFrameFragmentUniformBuffer->lightPositions[i][3] = 1.0f;
-			perFrameFragmentUniformBuffer->lightColors[i][0] = 0.0f;
-			perFrameFragmentUniformBuffer->lightColors[i][1] = 0.0f;
-			perFrameFragmentUniformBuffer->lightColors[i][2] = 0.0f;
-			perFrameFragmentUniformBuffer->lightColors[i][3] = 1.0f;
-			perFrameFragmentUniformBuffer->lightPowers[i] = 0.0f;
-			perFrameFragmentUniformBuffer->lightRadii[i] = 0.0f;
-		}
+		// Inactive lights (3-7) stay zero from pre-loop memset
 
 		perFrameFragmentUniformBuffer->cameraPosition[0] = cameraPosition.x;
 		perFrameFragmentUniformBuffer->cameraPosition[1] = cameraPosition.y;

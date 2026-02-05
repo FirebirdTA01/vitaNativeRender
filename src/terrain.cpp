@@ -287,101 +287,48 @@ void TerrainChunk::setCurrentLOD(LODLevel lod)
 	currentLOD = lod;
 }
 
-bool TerrainChunk::isInFrustum(const Matrix4x4& viewProjMatrix) const
+void FrustumPlanes::extractFromMatrix(const Matrix4x4& viewProjMatrix)
 {
-	// Simple sphere frustum test
-	
-	//Row-major layout:
-	// row0 = m[0],m[1],m[2],m[3]
-	// row1 = m[4],m[5],m[6],m[7]
-	// row2 = m[8],m[9],m[10],m[11]
-	// row3 = m[12],m[13],m[14],m[15]
+	// Row-major layout:
+	// row0 = m[0],m[1],m[2],m[3]   row1 = m[4]..m[7]
+	// row2 = m[8]..m[11]           row3 = m[12]..m[15]
 	const float* m = viewProjMatrix.getData();
 
-	struct Plane
-	{
-		float a, b, c, d;
-	}planes[6];
+	planes[0] = { m[12]+m[0], m[13]+m[1], m[14]+m[2],  m[15]+m[3]  }; // LEFT
+	planes[1] = { m[12]-m[0], m[13]-m[1], m[14]-m[2],  m[15]-m[3]  }; // RIGHT
+	planes[2] = { m[12]+m[4], m[13]+m[5], m[14]+m[6],  m[15]+m[7]  }; // BOTTOM
+	planes[3] = { m[12]-m[4], m[13]-m[5], m[14]-m[6],  m[15]-m[7]  }; // TOP
+	planes[4] = { m[12]+m[8], m[13]+m[9], m[14]+m[10], m[15]+m[11] }; // NEAR
+	planes[5] = { m[12]-m[8], m[13]-m[9], m[14]-m[10], m[15]-m[11] }; // FAR
 
-	// LEFT = row3 + row0
-	planes[0] = 
-	{
-	  m[12] + m[0],
-	  m[13] + m[1],
-	  m[14] + m[2],
-	  m[15] + m[3]
-	};
-
-	// RIGHT = row3 - row0
-	planes[1] = 
-	{
-	  m[12] - m[0],
-	  m[13] - m[1],
-	  m[14] - m[2],
-	  m[15] - m[3]
-	};
-
-	// BOTTOM = row3 + row1
-	planes[2] = 
-	{
-	  m[12] + m[4],
-	  m[13] + m[5],
-	  m[14] + m[6],
-	  m[15] + m[7]
-	};
-
-	// TOP = row3 - row1
-	planes[3] = 
-	{
-	  m[12] - m[4],
-	  m[13] - m[5],
-	  m[14] - m[6],
-	  m[15] - m[7]
-	};
-
-	// NEAR = row3 + row2
-	planes[4] = 
-	{
-	  m[12] + m[8],
-	  m[13] + m[9],
-	  m[14] + m[10],
-	  m[15] + m[11]
-	};
-
-	// FAR = row3 - row2
-	planes[5] = 
-	{
-	  m[12] - m[8],
-	  m[13] - m[9],
-	  m[14] - m[10],
-	  m[15] - m[11]
-	};
-
-	// normalize + sphere-plane test
-	for (int i = 0; i < 6; ++i) 
+	// Normalize all 6 planes once (instead of per-chunk)
+	for (int i = 0; i < 6; ++i)
 	{
 		float invLen = 1.0f / sqrtf(
 			planes[i].a * planes[i].a +
 			planes[i].b * planes[i].b +
 			planes[i].c * planes[i].c
 		);
-
 		planes[i].a *= invLen;
 		planes[i].b *= invLen;
 		planes[i].c *= invLen;
 		planes[i].d *= invLen;
+	}
+}
 
-		// signed distance from center to plane
-		float dist = planes[i].a * center.x
-			+ planes[i].b * center.y
-			+ planes[i].c * center.z
-			+ planes[i].d;
+bool TerrainChunk::isInFrustum(const FrustumPlanes& frustum) const
+{
+	// Sphere-plane test against pre-extracted planes
+	for (int i = 0; i < 6; ++i)
+	{
+		float dist = frustum.planes[i].a * center.x
+			+ frustum.planes[i].b * center.y
+			+ frustum.planes[i].c * center.z
+			+ frustum.planes[i].d;
 
-		// if the entire sphere is �behind� this plane, cull it
 		if (dist < -boundingRadius)
 			return false;
 	}
-
 	return true;
 }
 
@@ -543,22 +490,34 @@ bool Terrain::initialize()
 	return true;
 }
 
-std::vector<TerrainChunk*> Terrain::getVisibleChunks(const Matrix4x4& viewProjMatrix)
+const std::vector<TerrainChunk*>& Terrain::getVisibleChunks(const Matrix4x4& viewProjMatrix, const Vector3f& cameraPos)
 {
-	std::vector<TerrainChunk*> visible;
-	visible.reserve(chunks.size());
+	// Extract frustum planes once (not per-chunk)
+	FrustumPlanes frustum;
+	frustum.extractFromMatrix(viewProjMatrix);
+
+	// Reuse cached vector — clear() doesn't deallocate, avoids heap alloc per frame
+	visibleChunksCache.clear();
 
 	visibleChunkCount = 0;
 	for (auto& chunk : chunks)
 	{
-		if (chunk->isInFrustum(viewProjMatrix))
+		if (chunk->isInFrustum(frustum))
 		{
-			visible.push_back(chunk.get());
+			visibleChunksCache.push_back(chunk.get());
 			visibleChunkCount++;
 		}
 	}
 
-	return visible;
+	// Sort front-to-back for better HSR on SGX543 TBDR
+	std::sort(visibleChunksCache.begin(), visibleChunksCache.end(),
+		[&cameraPos](const TerrainChunk* a, const TerrainChunk* b) {
+			Vector3f da = a->getCenter() - cameraPos;
+			Vector3f db = b->getCenter() - cameraPos;
+			return (da.x*da.x + da.y*da.y + da.z*da.z) < (db.x*db.x + db.y*db.y + db.z*db.z);
+		});
+
+	return visibleChunksCache;
 }
 
 const std::vector<std::unique_ptr<TerrainChunk>>& Terrain::getChunks() const
@@ -600,10 +559,11 @@ int Terrain::getTotalIndices() const
 
 void Terrain::updateLODs(const Vector3f& cameraPos, const Vector3f& viewDir)
 {
+	// Shift camera into local terrain space once (not per-chunk)
+	Vector3f localCam = cameraPos - terrainOffset;
+
 	for (auto& chunk : chunks)
 	{
-		// shift camera into local terrain space
-		Vector3f localCam = cameraPos - terrainOffset;
 		TerrainChunk::LODLevel newLOD = chunk->calculateLOD(localCam, viewDir);
 		chunk->setCurrentLOD(newLOD);
 	}
