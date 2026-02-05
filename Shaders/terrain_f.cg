@@ -83,9 +83,9 @@ void main(
 
     out half4 out_color : COLOR)
 {
-    // Reconstruct TBN
+    // Reconstruct TBN — skip T normalize since R = normalize(TBN * normalMap) compensates
     half3 N = normalize(pass_surfaceNormal.xyz);
-    half3 T = normalize(pass_tangent.xyz);
+    half3 T = pass_tangent.xyz;
     half3 B = cross(N, T) * pass_tangent.w;
     half3x3 TBN = half3x3(T, B, N);
 
