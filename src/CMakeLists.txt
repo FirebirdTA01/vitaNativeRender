@@ -1,4 +1,4 @@
-add_executable(${PROJECT_NAME} main.cpp matrix.h matrix.cpp commonUtils.h camera.h camera.cpp EMP_Logo.h EMP_Logo_Alpha.h light.h light.cpp terrain.h terrain.cpp terrainTextures.h memory.h memory.cpp texture.h texture.cpp benchmark.h benchmark.cpp)
+add_executable(${PROJECT_NAME} main.cpp matrix.h matrix.cpp commonUtils.h camera.h camera.cpp EMP_Logo.h EMP_Logo_Alpha.h light.h light.cpp terrain.h terrain.cpp terrainTextures.h memory.h memory.cpp texture.h texture.cpp benchmark.h benchmark.cpp bcEncoder.h bcEncoder.cpp)
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".elf")
 
 set(CMAKE_VERBOSE_MAKEFILE ON)

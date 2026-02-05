@@ -201,6 +201,25 @@ bool Texture::loadFromDataExpanded(const unsigned char* base, int srcComp, int d
     return result;
 }
 
+bool Texture::loadFromCompressedData(const uint8_t* data, size_t totalSize)
+{
+    SceUID uid;
+    void* addr = gpuAllocMap(totalSize,
+        SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
+        SCE_GXM_MEMORY_ATTRIB_READ,
+        &uid);
+    if (!addr)
+    {
+        sceClibPrintf("ERROR: Texture::loadFromCompressedData() failed to allocate GPU memory\n");
+        return false;
+    }
+
+    memcpy(addr, data, totalSize);
+
+    bindMemory(addr, uid);
+    return init() == SCE_OK;
+}
+
 int32_t Texture::init()
 {
 	if (memAddr == nullptr)

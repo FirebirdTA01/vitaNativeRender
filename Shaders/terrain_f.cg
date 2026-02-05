@@ -92,7 +92,9 @@ void main(
     // Sample textures directly - no conditional logic
     half3 albedo = tex2D(u_diffuseMap, pass_texCoord).rgb;
     half roughness = tex2D(u_roughnessMap, pass_texCoord).r;
-    half3 normalFromMap = tex2D(u_normalMap, pass_texCoord).rgb * 2.0 - 1.0;
+    // BC5 stores only XY; reconstruct Z = sqrt(1 - x^2 - y^2)
+    half2 normalXY = tex2D(u_normalMap, pass_texCoord).rg * 2.0 - 1.0;
+    half3 normalFromMap = half3(normalXY, sqrt(saturate(1.0 - dot(normalXY, normalXY))));
     half3 R = normalize (mul(TBN, normalFromMap));
 
     //View vector

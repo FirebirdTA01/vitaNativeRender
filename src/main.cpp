@@ -21,6 +21,7 @@
 #include "EMP_Logo_Alpha.h"
 #include "terrainTextures.h"
 #include "benchmark.h"
+#include "bcEncoder.h"
 
 #define DISPLAY_WIDTH 960 // Default display width in pixels
 #define DISPLAY_HEIGHT 544 // Default display height in pixels
@@ -2071,27 +2072,67 @@ int main()
 
 	Texture terrainDiffuseTex, terrainRoughTex, terrainNormalTex;
 
-	terrainDiffuseTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+	int terrainTexMips = bcMipCount(repeatingGravel_256_diffuse_width, repeatingGravel_256_diffuse_height);
+	size_t uncompressedPerTex = Texture::calculateTextureDataSize(
+		repeatingGravel_256_diffuse_width, repeatingGravel_256_diffuse_height, 4, terrainTexMips);
+	sceClibPrintf("=== Terrain texture compression ===\n");
+	sceClibPrintf("Mip levels: %d, Uncompressed size per texture (RGBA): %u bytes\n",
+		terrainTexMips, (unsigned)uncompressedPerTex);
+
+	// Diffuse: BC1 (8:1 compression for RGB)
+	terrainDiffuseTex.setFormat(SCE_GXM_TEXTURE_FORMAT_UBC1_ABGR);
 	terrainDiffuseTex.setTextureType(SCE_GXM_TEXTURE_SWIZZLED);
 	terrainDiffuseTex.setSize(repeatingGravel_256_diffuse_width, repeatingGravel_256_diffuse_height);
 	terrainDiffuseTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainDiffuseTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
+	terrainDiffuseTex.setMipCount(terrainTexMips);
+	{
+		size_t compSize = bcTotalSize(repeatingGravel_256_diffuse_width, repeatingGravel_256_diffuse_height, BC_FORMAT_1, terrainTexMips);
+		sceClibPrintf("Diffuse BC1: %u bytes (%.1fx compression)\n", (unsigned)compSize, (float)uncompressedPerTex / compSize);
+		uint8_t* compData = (uint8_t*)malloc(compSize);
+		bcEncodeTexture(repeatingGravel_256_diffuse_data, 3,
+			repeatingGravel_256_diffuse_width, repeatingGravel_256_diffuse_height,
+			BC_FORMAT_1, terrainTexMips, compData);
+		terrainDiffuseTex.loadFromCompressedData(compData, compSize);
+		free(compData);
+	}
 
-	terrainRoughTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+	// Roughness: BC4 (8:1 compression for single channel)
+	terrainRoughTex.setFormat(SCE_GXM_TEXTURE_FORMAT_UBC4_000R);
 	terrainRoughTex.setTextureType(SCE_GXM_TEXTURE_SWIZZLED);
 	terrainRoughTex.setSize(repeatingGravel_256_roughness_width, repeatingGravel_256_roughness_height);
 	terrainRoughTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainRoughTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
+	terrainRoughTex.setMipCount(terrainTexMips);
+	{
+		size_t compSize = bcTotalSize(repeatingGravel_256_roughness_width, repeatingGravel_256_roughness_height, BC_FORMAT_4, terrainTexMips);
+		sceClibPrintf("Roughness BC4: %u bytes (%.1fx compression)\n", (unsigned)compSize, (float)uncompressedPerTex / compSize);
+		uint8_t* compData = (uint8_t*)malloc(compSize);
+		bcEncodeTexture(repeatingGravel_256_roughness_data, 3,
+			repeatingGravel_256_roughness_width, repeatingGravel_256_roughness_height,
+			BC_FORMAT_4, terrainTexMips, compData);
+		terrainRoughTex.loadFromCompressedData(compData, compSize);
+		free(compData);
+	}
 
-	terrainNormalTex.setFormat(SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+	// Normal: BC5 (4:1 compression for XY, Z reconstructed in shader)
+	terrainNormalTex.setFormat(SCE_GXM_TEXTURE_FORMAT_UBC5_00GR);
 	terrainNormalTex.setTextureType(SCE_GXM_TEXTURE_SWIZZLED);
 	terrainNormalTex.setSize(repeatingGravel_256_normal_width, repeatingGravel_256_normal_height);
 	terrainNormalTex.setFilters(SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR, true);
 	terrainNormalTex.setAddressModes(SCE_GXM_TEXTURE_ADDR_REPEAT, SCE_GXM_TEXTURE_ADDR_REPEAT);
-
-	terrainDiffuseTex.loadFromDataExpanded(repeatingGravel_256_diffuse_data, 3, 4, 255);
-	terrainRoughTex.loadFromDataExpanded(repeatingGravel_256_roughness_data, 3, 4, 255);
-	terrainNormalTex.loadFromDataExpanded(repeatingGravel_256_normal_data, 3, 4, 255, true);
+	terrainNormalTex.setMipCount(terrainTexMips);
+	{
+		size_t compSize = bcTotalSize(repeatingGravel_256_normal_width, repeatingGravel_256_normal_height, BC_FORMAT_5, terrainTexMips);
+		sceClibPrintf("Normal BC5: %u bytes (%.1fx compression)\n", (unsigned)compSize, (float)uncompressedPerTex / compSize);
+		uint8_t* compData = (uint8_t*)malloc(compSize);
+		bcEncodeTexture(repeatingGravel_256_normal_data, 3,
+			repeatingGravel_256_normal_width, repeatingGravel_256_normal_height,
+			BC_FORMAT_5, terrainTexMips, compData, true);
+		terrainNormalTex.loadFromCompressedData(compData, compSize);
+		free(compData);
+	}
+	sceClibPrintf("=== End terrain texture compression ===\n");
 
 	//set model position and rotation
 	Vector3f colorCubePosition = { -0.8f, 1.0f, -2.5f };

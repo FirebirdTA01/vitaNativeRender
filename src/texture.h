@@ -13,6 +13,9 @@ public:
 	bool loadFromData(const unsigned char* base, int comp, bool isNormalMap = false);
 	// Load with component expansion (e.g., 3-component source -> 4-component GPU format)
 	bool loadFromDataExpanded(const unsigned char* base, int srcComp, int dstComp, unsigned char fillValue = 255, bool isNormalMap = false);
+	// Load pre-compressed BC data directly to GPU memory (no PTLA transfer).
+	// Caller must set format, size, type, mipCount, etc. via setters before calling.
+	bool loadFromCompressedData(const uint8_t* data, size_t totalSize);
 	// Initialize the GXM texture object; returns SCE_OK on success or error code
 	int32_t init();
 	// Release GPU memory and unmap
