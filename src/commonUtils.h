@@ -176,35 +176,38 @@ inline int16_t floatToS16N(float v)
 	return (int16_t)(v * 32767.0f);
 }
 
-// Compressed terrain PBR vertex: position + UV as float32, TBN as signed 16-bit normalized
-// Reduces vertex size from 56 bytes (PBRVertex) to 40 bytes (28.5% smaller)
+// Compressed terrain PBR vertex: position + UV as float32, normal + tangent as signed 16-bit normalized
+// Handedness is precomputed on CPU and stored in tangent.w, eliminating bitangent from vertex data
 // S16N provides full precision for normalized vectors in the -1 to 1 range
 struct TerrainPBRVertex
 {
 	TerrainPBRVertex() : x(0.0f), y(0.0f), z(0.0f), u(0.0f), v(0.0f),
-		nx(0), ny(0), nz(0), tx(0), ty(0), tz(0), bx(0), by(0), bz(0), _pad(0) {};
+		nx(0), ny(0), nz(0), tx(0), ty(0), tz(0), tw(0), _pad(0) {};
 
-	TerrainPBRVertex(Vector3f inPos, Vector2f inUV, Vector3f inNormal)
-		: x(inPos.x), y(inPos.y), z(inPos.z), u(inUV.x), v(inUV.y),
-		  nx(floatToS16N(inNormal.x)), ny(floatToS16N(inNormal.y)), nz(floatToS16N(inNormal.z)),
-		  tx(floatToS16N(1.0f)), ty(floatToS16N(0.0f)), tz(floatToS16N(0.0f)),  // tangent = (1,0,0)
-		  bx(floatToS16N(0.0f)), by(floatToS16N(0.0f)), bz(floatToS16N(1.0f)),  // bitangent = (0,0,1)
-		  _pad(0) {};
-
-	TerrainPBRVertex(Vector3f inPos, Vector2f inUV, Vector3f inNormal, Vector3f inTangent, Vector3f inBitangent)
+	TerrainPBRVertex(Vector3f inPos, Vector2f inUV, Vector3f inNormal,
+		Vector3f inTangent, Vector3f inBitangent)
 		: x(inPos.x), y(inPos.y), z(inPos.z), u(inUV.x), v(inUV.y),
 		  nx(floatToS16N(inNormal.x)), ny(floatToS16N(inNormal.y)), nz(floatToS16N(inNormal.z)),
 		  tx(floatToS16N(inTangent.x)), ty(floatToS16N(inTangent.y)), tz(floatToS16N(inTangent.z)),
-		  bx(floatToS16N(inBitangent.x)), by(floatToS16N(inBitangent.y)), bz(floatToS16N(inBitangent.z)),
-		  _pad(0) {};
+		  _pad(0)
+	{
+		// Compute handedness: +1 if (NxT)·B > 0, else -1
+		Vector3f c = {
+			inNormal.y * inTangent.z - inNormal.z * inTangent.y,
+			inNormal.z * inTangent.x - inNormal.x * inTangent.z,
+			inNormal.x * inTangent.y - inNormal.y * inTangent.x
+		};
+		float d = c.x * inBitangent.x + c.y * inBitangent.y + c.z * inBitangent.z;
+		tw = floatToS16N(d < 0.0f ? -1.0f : 1.0f);
+	};
 
 	float x, y, z;              // 12 bytes - position (full precision)
 	float u, v;                 // 8 bytes - UV (full precision for tiling)
 	int16_t nx, ny, nz;         // 6 bytes - normal (S16N)
-	int16_t tx, ty, tz;         // 6 bytes - tangent (S16N)
-	int16_t bx, by, bz;         // 6 bytes - bitangent (S16N)
+	int16_t tx, ty, tz;         // 6 bytes - tangent xyz (S16N)
+	int16_t tw;                 // 2 bytes - tangent w = handedness sign (S16N)
 	int16_t _pad;               // 2 bytes - padding for 4-byte alignment
-};                              // 40 bytes total
+};                              // 36 bytes total
 
 inline Vector3f operator+(const Vector3f& left, const Vector3f& right)
 {

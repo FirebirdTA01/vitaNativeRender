@@ -255,7 +255,6 @@ static const SceGxmProgramParameter* gxmTerrainVertexProgram_positionParam;
 static const SceGxmProgramParameter* gxmTerrainVertexProgram_texCoordParam;
 static const SceGxmProgramParameter* gxmTerrainVertexProgram_normalParam;
 static const SceGxmProgramParameter* gxmTerrainVertexProgram_tangentParam;
-static const SceGxmProgramParameter* gxmTerrainVertexProgram_bitangentParam;
 static const SceGxmProgramParameter* gxmTerrainVertexProgram_u_viewMatrixParam;
 static const SceGxmProgramParameter* gxmTerrainVertexProgram_u_projectionMatrixParam;
 static const SceGxmProgramParameter* gxmTerrainVertexProgram_u_cameraPositionParam;
@@ -1382,14 +1381,12 @@ void createShaders()
 	static const SceGxmProgramParameter* gxmTeerrainVertexProgram_texCoordParam;
 	static const SceGxmProgramParameter* gxmTerrainVertexProgram_normalParam;
 	static const SceGxmProgramParameter* gxmTerrainVertexProgram_tangentParam;
-	static const SceGxmProgramParameter* gxmTerrainVertexProgram_bitangentParam;
 	*/
 
 	findGxmShaderAttributeByName(terrainVertexProgram, "in_position", &gxmTerrainVertexProgram_positionParam);
 	findGxmShaderAttributeByName(terrainVertexProgram, "in_texCoord", &gxmTerrainVertexProgram_texCoordParam);
 	findGxmShaderAttributeByName(terrainVertexProgram, "in_normal", &gxmTerrainVertexProgram_normalParam);
 	findGxmShaderAttributeByName(terrainVertexProgram, "in_tangent", &gxmTerrainVertexProgram_tangentParam);
-	findGxmShaderAttributeByName(terrainVertexProgram, "in_bitangent", &gxmTerrainVertexProgram_bitangentParam);
 	findGxmShaderUniformByName(terrainVertexProgram, "u_modelMatrix", &gxmTerrainVertexProgram_u_modelMatrixParam);
 	findGxmShaderUniformByName(terrainVertexProgram, "u_perVFrame.u_viewMatrix", &gxmTerrainVertexProgram_u_viewMatrixParam);
 	findGxmShaderUniformByName(terrainVertexProgram, "u_perVFrame.u_projectionMatrix", &gxmTerrainVertexProgram_u_projectionMatrixParam);
@@ -1413,7 +1410,7 @@ void createShaders()
 	sceClibPrintf("terrain LightRadiiParam at address: %p\n", (void*)gxmTerrainFragmentProgram_u_lightRadiiParam);
 	sceClibPrintf("terrain F0 at address: %p\n", (void*)gxmTerrainFragmentProgram_u_F0Param);
 
-	SceGxmVertexAttribute terrain_vertex_attributes[5];
+	SceGxmVertexAttribute terrain_vertex_attributes[4];
 	SceGxmVertexStream terrain_vertex_stream;
 	terrain_vertex_attributes[0].streamIndex = 0;
 	terrain_vertex_attributes[0].offset = 0;
@@ -1429,29 +1426,23 @@ void createShaders()
 		gxmTerrainVertexProgram_texCoordParam);
 	terrain_vertex_attributes[2].streamIndex = 0;
 	terrain_vertex_attributes[2].offset = offsetof(TerrainPBRVertex, nx);
-	terrain_vertex_attributes[2].format = SCE_GXM_ATTRIBUTE_FORMAT_S16N;  // Signed 16-bit normalized
+	terrain_vertex_attributes[2].format = SCE_GXM_ATTRIBUTE_FORMAT_S16N;
 	terrain_vertex_attributes[2].componentCount = 3;
 	terrain_vertex_attributes[2].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxmTerrainVertexProgram_normalParam);
 	terrain_vertex_attributes[3].streamIndex = 0;
 	terrain_vertex_attributes[3].offset = offsetof(TerrainPBRVertex, tx);
-	terrain_vertex_attributes[3].format = SCE_GXM_ATTRIBUTE_FORMAT_S16N;  // Signed 16-bit normalized
-	terrain_vertex_attributes[3].componentCount = 3;
+	terrain_vertex_attributes[3].format = SCE_GXM_ATTRIBUTE_FORMAT_S16N;
+	terrain_vertex_attributes[3].componentCount = 4; // xyz = tangent, w = handedness
 	terrain_vertex_attributes[3].regIndex = sceGxmProgramParameterGetResourceIndex(
 		gxmTerrainVertexProgram_tangentParam);
-	terrain_vertex_attributes[4].streamIndex = 0;
-	terrain_vertex_attributes[4].offset = offsetof(TerrainPBRVertex, bx);
-	terrain_vertex_attributes[4].format = SCE_GXM_ATTRIBUTE_FORMAT_S16N;  // Signed 16-bit normalized
-	terrain_vertex_attributes[4].componentCount = 3;
-	terrain_vertex_attributes[4].regIndex = sceGxmProgramParameterGetResourceIndex(
-		gxmTerrainVertexProgram_bitangentParam);
 
 	terrain_vertex_stream.stride = sizeof(struct TerrainPBRVertex);
 	terrain_vertex_stream.indexSource = SCE_GXM_INDEX_SOURCE_INDEX_32BIT;
 
 	err = sceGxmShaderPatcherCreateVertexProgram(gxmShaderPatcher,
 		gxmTerrainVertexProgramID, terrain_vertex_attributes,
-		5, &terrain_vertex_stream, 1, &gxmTerrainVertexProgramPatched);
+		4, &terrain_vertex_stream, 1, &gxmTerrainVertexProgramPatched);
 	if (err == 0)
 	{
 		sceClibPrintf("Terrain VertexProgram created at address: %p\n", (void*)gxmTerrainVertexProgramPatched);
